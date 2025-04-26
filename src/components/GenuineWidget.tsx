@@ -46,6 +46,7 @@ export const GenuineWidget: React.FC = () => {
   const [isModelLoaded, setIsModelLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<string>('')
+  const [isModelLoading, setIsModelLoading] = useState(true)
   
   // Detection state
   const [status, setStatus] = useState<string>('Click to start verification')
@@ -94,17 +95,18 @@ export const GenuineWidget: React.FC = () => {
     text: 'rgba(255, 255, 255, 0.8)'   // White (text)
   }
 
-  // Simulation timers
-  const fakeDetectionTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const fakeVerificationTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
-
   // Load TensorFlow and MediaPipe FaceMesh model
   useEffect(() => {
     const loadModel = async () => {
       try {
+        setIsModelLoading(true)
+        setError(null)
+        setErrorDetails('')
+        
         console.log('Initializing TensorFlow...')
         await tf.ready()
+        console.log('TensorFlow initialized successfully')
+        
         console.log('Loading MediaPipe FaceMesh model...')
         const model = await faceLandmarksDetection.createDetector(
           faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
@@ -114,34 +116,34 @@ export const GenuineWidget: React.FC = () => {
             maxFaces: 1
           }
         )
+        
+        if (!model) {
+          throw new Error('Failed to initialize face detection model')
+        }
+        
         console.log('MediaPipe FaceMesh model loaded successfully')
         modelRef.current = model
         setIsModelLoaded(true)
+        setIsModelLoading(false)
       } catch (err) {
         console.error('Error loading face detection model:', err)
-        setError('Failed to load face detection model')
+        setError('Failed to load face detection model. Please try refreshing the page.')
+        setErrorDetails((err as Error).message)
+        setIsModelLoading(false)
+        setIsModelLoaded(false)
       }
     }
+    
     loadModel()
-
     return () => cleanup()
   }, [])
 
   const cleanup = useCallback(() => {
     console.log('Cleanup triggered. Reason:', error || 'manual cleanup')
     
-    // Clear all timers
-    if (fakeDetectionTimerRef.current) {
-      clearTimeout(fakeDetectionTimerRef.current)
-      fakeDetectionTimerRef.current = null
-    }
-    if (fakeVerificationTimerRef.current) {
-      clearTimeout(fakeVerificationTimerRef.current)
-      fakeVerificationTimerRef.current = null
-    }
-    if (countdownTimerRef.current) {
-      clearTimeout(countdownTimerRef.current)
-      countdownTimerRef.current = null
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
     }
     
     if (videoRef.current?.srcObject) {
@@ -175,52 +177,6 @@ export const GenuineWidget: React.FC = () => {
     setPositioningMessage('')
   }, [error])
 
-  // Only cleanup on error, not on every state change
-  useEffect(() => {
-    if (error && !isCameraActive) {
-      console.log('Error detected, triggering cleanup:', error)
-      cleanup()
-    }
-  }, [error, cleanup, isCameraActive])
-
-  // Improved eye validation
-  const validateEyeData = useCallback((face: FaceMeshPrediction): boolean => {
-    try {
-      if (!face || !face.keypoints) {
-        console.debug('No face or keypoints found')
-        return false
-      }
-
-      const keypoints = face.keypoints
-      console.debug('Face keypoints:', {
-        count: keypoints.length,
-        coordinates: keypoints,
-        state: detectionState
-      })
-
-      // Allow detection with just one confident eye
-      if (keypoints.length < 1) {
-        console.debug('No eye keypoints found')
-        return false
-      }
-
-      // Basic coordinate validation
-      for (const keypoint of keypoints) {
-        if (!keypoint || typeof keypoint.x !== 'number' || typeof keypoint.y !== 'number') {
-          console.debug('Invalid keypoint format:', keypoint)
-          return false
-        }
-      }
-
-      // If we have at least one valid eye, consider it good enough
-      return true
-
-    } catch (err) {
-      console.error('Eye validation error:', err)
-      return false
-    }
-  }, [detectionState])
-
   // Safe timer clearing
   const clearDetectionInterval = useCallback(() => {
     const interval = detectionIntervalRef.current
@@ -238,43 +194,15 @@ export const GenuineWidget: React.FC = () => {
     }
   }, [])
 
-  // Update verification timer handling
-  const startVerification = useCallback(() => {
-    console.log('Starting verification task')
-    setDetectionState('blinking')
-    setBlinkCount(0)
-    setTimeRemaining(5)
-    setCountdownMessage('Blink verification starting...')
-
-    const startTime = Date.now()
-    const updateTimer = () => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000)
-      const remaining = Math.max(0, 5 - elapsed)
-      setTimeRemaining(remaining)
-
-      if (remaining === 0) {
-        // Simulate 80% success rate
-        const isSuccess = Math.random() < 0.8
-        if (isSuccess) {
-          setDetectionState('success')
-          setStatus('Verification successful!')
-        } else {
-          setDetectionState('failed')
-          setStatus('Verification failed. Click Try Again.')
-        }
-        setCountdownMessage('')
-        if (countdownTimerRef.current) {
-          clearInterval(countdownTimerRef.current)
-          countdownTimerRef.current = null
-        }
-      }
-    }
-
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current)
-    }
-    countdownTimerRef.current = setInterval(updateTimer, 100)
-  }, [])
+  // Update error handling
+  const handleDetectionError = useCallback((error: Error, context: string) => {
+    console.error(`Detection error (${context}):`, error)
+    setError(`Detection error: ${error.message}`)
+    setErrorDetails(error.message)
+    setStatus('Failed to detect face')
+    setDetectionState('failed')
+    clearDetectionInterval()
+  }, [clearDetectionInterval])
 
   // Debug drawing functions
   const drawDebugOverlay = useCallback((
@@ -347,14 +275,51 @@ export const GenuineWidget: React.FC = () => {
       'R',
       DEBUG_COLORS.rightEye
     )
-
   }, [])
+
+  // Improved eye validation
+  const validateEyeData = useCallback((face: FaceMeshPrediction): boolean => {
+    try {
+      if (!face || !face.keypoints) {
+        console.debug('No face or keypoints found')
+        return false
+      }
+
+      const keypoints = face.keypoints
+      console.debug('Face keypoints:', {
+        count: keypoints.length,
+        coordinates: keypoints,
+        state: detectionState
+      })
+
+      // Allow detection with just one confident eye
+      if (keypoints.length < 1) {
+        console.debug('No eye keypoints found')
+        return false
+      }
+
+      // Basic coordinate validation
+      for (const keypoint of keypoints) {
+        if (!keypoint || typeof keypoint.x !== 'number' || typeof keypoint.y !== 'number') {
+          console.debug('Invalid keypoint format:', keypoint)
+          return false
+        }
+      }
+
+      // If we have at least one valid eye, consider it good enough
+      return true
+
+    } catch (err) {
+      console.error('Eye validation error:', err)
+      return false
+    }
+  }, [detectionState])
 
   // Update detection state with debug visualization
   const updateDetectionState = useCallback((
     metrics: DetectionMetrics, 
     face: FaceMeshPrediction
-  ) => {
+  ): void => {
     // Existing detection logic
     detectionBuffer.current = [
       ...detectionBuffer.current.slice(-(BUFFER_SIZE - 1)),
@@ -406,19 +371,10 @@ export const GenuineWidget: React.FC = () => {
         drawDebugOverlay(ctx, metrics, face)
       }
     }
-  }, [detectionState, clearDetectionInterval, startVerification, drawDebugOverlay])
+  }, [detectionState, clearDetectionInterval, drawDebugOverlay])
 
-  // Update error handling
-  const handleDetectionError = useCallback((error: Error, context: string) => {
-    console.error(`Detection error (${context}):`, error)
-    setError(`Detection error: ${error.message}`)
-    setErrorDetails(error.message)
-    setStatus('Failed to detect face')
-    setDetectionState('failed')
-    clearDetectionInterval()
-  }, [clearDetectionInterval])
-
-  const detectBlink = useCallback(async () => {
+  // Main detection function
+  const detectBlink = useCallback(async (): Promise<void> => {
     if (!videoRef.current || !modelRef.current || !videoRef.current.srcObject) {
       return
     }
@@ -436,11 +392,22 @@ export const GenuineWidget: React.FC = () => {
       }
 
       const face = predictions[0]
-      console.debug('Face detection:', {
-        keypoints: face.keypoints,
-        box: face.box,
-        state: detectionState
-      })
+      
+      // Enhanced debug logging for face detection
+      if (DEBUG) {
+        console.log('Face detection:', {
+          box: face.box ? {
+            topLeft: [face.box.xMin, face.box.yMin],
+            bottomRight: [face.box.xMin + face.box.width, face.box.yMin + face.box.height],
+            width: face.box.width,
+            height: face.box.height
+          } : null,
+          probability: face.box ? 1.0 : 0,
+          state: detectionState,
+          frameCount: detectionBuffer.current.length,
+          stableFrames: stableDetectionFrames.current
+        })
+      }
 
       if (!validateEyeData(face)) {
         return
@@ -464,6 +431,32 @@ export const GenuineWidget: React.FC = () => {
         return
       }
 
+      // Enhanced debug logging for eye landmarks
+      if (DEBUG) {
+        console.log('Eye landmarks:', {
+          leftEye: {
+            upper: [
+              { x: leftEyeUpper1.x, y: leftEyeUpper1.y },
+              { x: leftEyeUpper2.x, y: leftEyeUpper2.y }
+            ],
+            lower: [
+              { x: leftEyeLower1.x, y: leftEyeLower1.y },
+              { x: leftEyeLower2.x, y: leftEyeLower2.y }
+            ]
+          },
+          rightEye: {
+            upper: [
+              { x: rightEyeUpper1.x, y: rightEyeUpper1.y },
+              { x: rightEyeUpper2.x, y: rightEyeUpper2.y }
+            ],
+            lower: [
+              { x: rightEyeLower1.x, y: rightEyeLower1.y },
+              { x: rightEyeLower2.x, y: rightEyeLower2.y }
+            ]
+          }
+        })
+      }
+
       // Calculate eye openness using average vertical distance between upper and lower landmarks
       const leftEyeOpenness = (
         Math.abs(leftEyeUpper1.y - leftEyeLower1.y) +
@@ -474,6 +467,16 @@ export const GenuineWidget: React.FC = () => {
         Math.abs(rightEyeUpper1.y - rightEyeLower1.y) +
         Math.abs(rightEyeUpper2.y - rightEyeLower2.y)
       ) / 2
+
+      // Debug logging for blink detection
+      if (DEBUG) {
+        console.log('Eye openness:', {
+          left: leftEyeOpenness,
+          right: rightEyeOpenness,
+          threshold: BLINK_THRESHOLD,
+          blinkCount: blinkCount
+        })
+      }
 
       // Calculate eye center points for visualization
       const leftEyeCenter = {
@@ -503,7 +506,7 @@ export const GenuineWidget: React.FC = () => {
 
       updateDetectionState(metrics, face)
 
-      // Process blinks with improved accuracy
+      // Process blinks
       if (detectionState === 'blinking') {
         const currentEyeState = {
           left: leftEyeOpenness,
@@ -520,14 +523,23 @@ export const GenuineWidget: React.FC = () => {
                            (rightDiff > BLINK_THRESHOLD && currentEyeState.right < lastEyeState.current.right)
           
           if (isBlinking && now - lastBlinkTime.current > 500) {
-            console.debug('Blink detected:', { 
+            console.log('Blink detected:', { 
               leftDiff, 
               rightDiff,
               leftEyeOpenness: currentEyeState.left,
-              rightEyeOpenness: currentEyeState.right
+              rightEyeOpenness: currentEyeState.right,
+              timestamp: now
             })
             lastBlinkTime.current = now
-            setBlinkCount(prev => prev + 1)
+            setBlinkCount(prev => {
+              const newCount = prev + 1
+              if (newCount >= 3) { // Require 3 blinks for success
+                setDetectionState('success')
+                setStatus('Verification successful!')
+                clearDetectionInterval()
+              }
+              return newCount
+            })
           }
         }
 
@@ -544,73 +556,163 @@ export const GenuineWidget: React.FC = () => {
     } catch (err) {
       handleDetectionError(err as Error, 'frame-processing')
     }
-  }, [detectionState, validateEyeData, updateDetectionState, handleDetectionError])
+  }, [detectionState, blinkCount, handleDetectionError, updateDetectionState, clearDetectionInterval, validateEyeData])
+
+  // Update verification timer handling
+  const startVerification = useCallback((): void => {
+    console.log('Starting verification task')
+    setDetectionState('blinking')
+    setBlinkCount(0)
+    setTimeRemaining(5)
+    setCountdownMessage('Blink verification starting...')
+
+    // Start real detection interval
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+    }
+    detectionIntervalRef.current = setInterval(detectBlink, 100)
+  }, [detectBlink])
 
   const startCamera = useCallback(async () => {
     console.log('Starting camera initialization...')
     try {
-      if (!isModelLoaded) {
-        throw new Error('Face detection model not ready')
+      if (isModelLoading) {
+        throw new Error('Face detection model is still loading. Please wait...')
+      }
+      
+      if (!isModelLoaded || !modelRef.current) {
+        throw new Error('Face detection model failed to load. Please refresh the page.')
       }
 
       setStatus('Requesting camera access...')
       
-      const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName })
-      if (permissions.state === 'denied') {
-        throw new Error('Camera permission denied. Please enable camera access and refresh.')
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: {
-          facingMode: 'user',
-          width: { min: 320, ideal: 640, max: 1280 },
-          height: { min: 240, ideal: 480, max: 720 },
-          frameRate: { ideal: 15, max: 20 },
-          aspectRatio: { ideal: 1.333333 }
-        },
-        audio: false 
-      })
-
-      if (!videoRef.current) {
-        throw new Error('Video element not found')
-      }
-
-      videoRef.current.srcObject = stream
-      await videoRef.current.play()
-      
-      const frameRate = (stream.getVideoTracks()[0].getSettings().frameRate || 15)
-      const intervalMs = Math.max(Math.floor(1000 / frameRate), 66)
-
-      setIsCameraActive(true)
-      setError(null)
-      setErrorDetails('')
-      setDetectionState('camera-active')
-      setStatus('Looking for your eyes...')
-      detectionStartTime.current = Date.now()
-      
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current)
-      }
-
-      // Simulate eye detection after 1.5s
-      fakeDetectionTimerRef.current = setTimeout(() => {
-        setDetectionState('eyes-detected')
-        setEyesDetected(true)
-        setStatus('Eyes detected')
-        setPositioningMessage('')
+      // Check camera permissions first
+      let permissionStatus: PermissionStatus;
+      try {
+        permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName })
+        console.log('Camera permission status:', permissionStatus.state)
         
-        // Simulate verification ready after another 1.5s
-        fakeVerificationTimerRef.current = setTimeout(() => {
-          startVerification()
-        }, 1500)
-      }, 1500)
+        // Handle denied state immediately
+        if (permissionStatus.state === 'denied') {
+          const browserName = navigator.userAgent.includes('Chrome') ? 'Chrome' : 
+                            navigator.userAgent.includes('Firefox') ? 'Firefox' : 
+                            navigator.userAgent.includes('Safari') ? 'Safari' : 
+                            'your browser';
+          
+          const instructions = browserName === 'Chrome' ? 
+            '1. Click the camera icon 🎥 in the address bar\n2. Select "Allow"\n3. Refresh this page' :
+            browserName === 'Firefox' ?
+            '1. Click the camera icon 🎥 in the address bar\n2. Click "Remove Block"\n3. Refresh this page' :
+            browserName === 'Safari' ?
+            '1. Open Safari Preferences\n2. Go to Websites > Camera\n3. Find this website and select "Allow"\n4. Refresh this page' :
+            '1. Check your browser settings\n2. Allow camera access for this website\n3. Refresh this page';
+
+          throw new Error(
+            `Camera access is blocked. Here's how to enable it in ${browserName}:\n\n${instructions}\n\n` +
+            'If you don\'t see these options, try:\n' +
+            '1. Clear your browser settings for this site\n' +
+            '2. Refresh the page\n' +
+            '3. Try again with "Allow" when prompted'
+          )
+        }
+      } catch (err) {
+        if ((err as Error).name === 'TypeError') {
+          // Some browsers don't support permission query - proceed to getUserMedia
+          console.log('Permission query not supported, trying direct camera access')
+        } else {
+          throw err
+        }
+      }
+
+      // Clear any existing streams first
+      if (videoRef.current?.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
+        tracks.forEach(track => track.stop())
+        videoRef.current.srcObject = null
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: {
+            facingMode: 'user',
+            width: { min: 320, ideal: 640, max: 1280 },
+            height: { min: 240, ideal: 480, max: 720 },
+            frameRate: { ideal: 15, max: 20 },
+            aspectRatio: { ideal: 1.333333 }
+          },
+          audio: false 
+        })
+
+        if (!videoRef.current) {
+          throw new Error('Video element not found')
+        }
+
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        
+        const frameRate = (stream.getVideoTracks()[0].getSettings().frameRate || 15)
+        const intervalMs = Math.max(Math.floor(1000 / frameRate), 66)
+
+        setIsCameraActive(true)
+        setError(null)
+        setErrorDetails('')
+        setDetectionState('camera-active')
+        setStatus('Looking for your eyes...')
+        detectionStartTime.current = Date.now()
+        
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current)
+        }
+
+        detectionIntervalRef.current = setInterval(detectBlink, intervalMs)
+        setDetectionState('eyes-detected')
+
+      } catch (err) {
+        const error = err as Error
+        console.error('getUserMedia error:', error)
+        
+        // Handle specific getUserMedia errors
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          const browserName = navigator.userAgent.includes('Chrome') ? 'Chrome' : 
+                            navigator.userAgent.includes('Firefox') ? 'Firefox' : 
+                            navigator.userAgent.includes('Safari') ? 'Safari' : 
+                            'your browser';
+          
+          throw new Error(
+            `Camera access was denied. To fix this in ${browserName}:\n\n` +
+            '1. Look for the camera icon 🎥 in your address bar\n' +
+            '2. Click it and select "Allow"\n' +
+            '3. Then refresh this page\n\n' +
+            'If you don\'t see the camera icon:\n' +
+            '1. Clear your site settings\n' +
+            '2. Refresh the page\n' +
+            '3. Click "Allow" when prompted'
+          )
+        } else if (error.name === 'NotFoundError') {
+          throw new Error(
+            'No camera found. Please check that:\n\n' +
+            '1. Your camera is properly connected\n' +
+            '2. No other app is using the camera\n' +
+            '3. Your camera is not disabled in your OS settings'
+          )
+        } else if (error.name === 'NotReadableError') {
+          throw new Error(
+            'Cannot access your camera. Please try:\n\n' +
+            '1. Closing other apps that might be using your camera\n' +
+            '2. Restarting your browser\n' +
+            '3. Reconnecting your camera if it\'s external'
+          )
+        }
+        
+        throw error
+      }
 
     } catch (err) {
       const error = err as Error
       console.error('Camera setup error:', error)
-      setError(`Camera setup failed: ${error.message}`)
-      setErrorDetails(error.message)
-      setStatus('Failed to start camera')
+      setError(error.message)
+      setErrorDetails(error.name)
+      setStatus('Camera access failed')
       
       if (videoRef.current?.srcObject) {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
@@ -619,7 +721,124 @@ export const GenuineWidget: React.FC = () => {
       }
       setIsCameraActive(false)
     }
-  }, [isModelLoaded, startVerification])
+  }, [isModelLoaded, isModelLoading, detectBlink])
+
+  // Add permission reset handler
+  const handleResetPermissions = useCallback(async () => {
+    try {
+      // First stop any existing streams
+      if (videoRef.current?.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
+        tracks.forEach(track => track.stop())
+        videoRef.current.srcObject = null
+      }
+
+      // Clear all state
+      cleanup()
+
+      // Check current permission status
+      const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName })
+      console.log('Current camera permission status:', permissions.state)
+
+      if (permissions.state === 'denied') {
+        // If denied, we need to guide the user to browser settings
+        setError('Camera access is blocked. Please follow these steps:\n\n' +
+          '1. Click the camera icon in your browser\'s address bar\n' +
+          '2. Select "Always allow" for this site\n' +
+          '3. Refresh the page\n\n' +
+          'If you don\'t see the camera icon:\n' +
+          '1. Open browser Settings\n' +
+          '2. Go to Privacy & Security > Site Settings > Camera\n' +
+          '3. Find this site and allow access\n' +
+          '4. Return here and refresh the page')
+        return
+      }
+
+      try {
+        // Try to request with exact constraints to force a new prompt
+        const tempStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: 'user' },
+            width: { exact: 640 },
+            height: { exact: 480 }
+          }
+        })
+        tempStream.getTracks().forEach(track => track.stop())
+      } catch (err) {
+        // If that fails, try with basic constraints
+        const basicStream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        })
+        basicStream.getTracks().forEach(track => track.stop())
+      }
+
+      // Wait a brief moment before reloading to ensure permissions are updated
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
+
+    } catch (err) {
+      console.error('Failed to reset permissions:', err)
+      // Show more specific error based on the error type
+      if ((err as Error).name === 'NotAllowedError') {
+        setError('Camera access was denied. Please check your browser settings and ensure camera access is allowed for this site.')
+      } else if ((err as Error).name === 'NotFoundError') {
+        setError('No camera detected. Please ensure your camera is properly connected and not in use by another application.')
+      } else {
+        setError(`Failed to reset camera permissions: ${(err as Error).message}\n\nPlease try refreshing the page or checking your browser settings manually.`)
+      }
+    }
+  }, [cleanup])
+
+  // Update error display component with more helpful UI
+  const renderError = () => {
+    if (!error) return null
+
+    const isPermissionError = error.toLowerCase().includes('camera access') || 
+                            error.toLowerCase().includes('denied') ||
+                            error.toLowerCase().includes('blocked')
+
+    return (
+      <div className="p-4 bg-red-50 border border-red-100 rounded-lg space-y-3">
+        <div className="flex items-start gap-2">
+          <svg className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm text-red-600 font-medium whitespace-pre-line">
+              {error}
+            </p>
+            {errorDetails && (
+              <p className="text-xs text-red-500 mt-1 whitespace-pre-line">
+                Error type: {errorDetails}
+              </p>
+            )}
+          </div>
+        </div>
+        
+        <div className="flex flex-col gap-2 mt-2">
+          {isPermissionError && (
+            <button
+              onClick={handleResetPermissions}
+              className="flex items-center justify-center gap-2 text-sm bg-red-100 hover:bg-red-200 text-red-700 font-medium py-2 px-4 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              Fix Camera Permissions
+            </button>
+          )}
+          <button
+            onClick={() => window.location.reload()}
+            className="text-xs text-red-600 hover:text-red-700 font-medium underline"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   // Update action handling
   const handleActionClick = useCallback(() => {
@@ -744,105 +963,51 @@ export const GenuineWidget: React.FC = () => {
       <div className="p-8 space-y-6">
         {/* Header */}
         <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-2">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
-              <span className="text-2xl">👁️</span>
-              Genuine Verify
-            </h2>
-            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
-              Demo
-            </span>
-          </div>
-          <div className="space-y-2">
-            <p className="text-gray-500 text-lg">
-              A fast, privacy-first human verification widget
-            </p>
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700">
-              <p>
-                <span className="font-medium">Demo Mode:</span> This is a simulated preview showcasing the intended user experience and verification flow. The actual product will use real-time face detection.
-              </p>
-            </div>
-          </div>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center justify-center gap-2">
+            <span className="text-2xl">👁️</span>
+            Genuine Verify
+          </h2>
+          <p className="text-gray-500 text-lg">
+            A fast, privacy-first human verification widget
+          </p>
         </div>
+
+        {/* Loading State */}
+        {isModelLoading && (
+          <div className="text-center py-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading face detection model...</p>
+          </div>
+        )}
 
         {/* Main Content */}
         <div className="space-y-6">
           {/* Primary Action Button */}
-          {!['success', 'failed'].includes(detectionState) && (
-            <button 
-              className={`
-                w-full py-3 px-4 text-lg font-medium rounded-xl transition-all duration-200
-                ${(!isCameraActive || detectionState === 'blinking')
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow active:bg-blue-800' 
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
-              `}
-              type="button"
-              onClick={handleActionClick}
-              disabled={isCameraActive && !['failed', 'success'].includes(detectionState)}
-            >
-              {!isCameraActive 
-                ? 'Start Demo Verification'
-                : detectionState === 'blinking'
-                  ? 'Verification in Progress'
+          <button 
+            className={`
+              w-full py-3 px-4 text-lg font-medium rounded-xl transition-all duration-200
+              ${(!isCameraActive || ['failed', 'success'].includes(detectionState))
+                ? isModelLoading 
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow active:bg-blue-800' 
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
+            `}
+            type="button"
+            onClick={handleActionClick}
+            disabled={isModelLoading || (isCameraActive && !['failed', 'success'].includes(detectionState))}
+          >
+            {isModelLoading 
+              ? 'Loading...'
+              : !isCameraActive 
+                ? 'Start Verification'
+                : ['failed', 'success'].includes(detectionState)
+                  ? 'Try Again'
                   : 'Verification in Progress'
-              }
-            </button>
-          )}
+            }
+          </button>
 
-          {/* Success/Failure State with Try Again */}
-          {['success', 'failed'].includes(detectionState) && (
-            <div className="space-y-4">
-              <div className={`p-4 rounded-lg text-center space-y-3 ${
-                detectionState === 'success' 
-                  ? 'bg-green-50 border border-green-100'
-                  : 'bg-red-50 border border-red-100'
-              }`}>
-                <div className={`text-2xl ${
-                  detectionState === 'success' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {detectionState === 'success' ? '✓' : '✕'}
-                </div>
-                <p className={`font-medium ${
-                  detectionState === 'success' ? 'text-green-800' : 'text-red-800'
-                }`}>
-                  {detectionState === 'success' 
-                    ? 'Demo Verification Successful!'
-                    : 'Demo Verification Failed'
-                  }
-                </p>
-              </div>
-              
-              <button 
-                className="w-full py-3 px-4 text-lg font-medium rounded-xl transition-all duration-200
-                  bg-gray-100 hover:bg-gray-200 text-gray-700 shadow-sm hover:shadow active:bg-gray-300"
-                type="button"
-                onClick={handleActionClick}
-              >
-                Try Demo Again
-              </button>
-            </div>
-          )}
-
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-100 rounded-lg space-y-2">
-              <p className="text-sm text-red-600 font-medium">
-                {error}
-              </p>
-              {errorDetails && (
-                <p className="text-xs text-red-500">
-                  {errorDetails}
-                </p>
-              )}
-              {!isCameraActive && (
-                <button
-                  onClick={() => window.location.reload()}
-                  className="text-xs text-red-600 hover:text-red-700 font-medium underline"
-                >
-                  Refresh page to try again
-                </button>
-              )}
-            </div>
-          )}
+          {/* Error Display */}
+          {renderError()}
           
           <div className={`
             relative aspect-video w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50
@@ -899,24 +1064,14 @@ export const GenuineWidget: React.FC = () => {
               </span>
             </div>
 
-            {/* Timer overlay */}
-            {timeRemaining > 0 && (
-              <div className="absolute inset-x-0 top-2 flex flex-col items-center gap-1">
+            {/* Blink counter */}
+            {detectionState === 'blinking' && (
+              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-1">
                 <div className="bg-black/50 text-white text-lg font-mono px-4 py-1 rounded-full">
-                  {timeRemaining}s
+                  Blinks: {blinkCount}/3
                 </div>
-                {countdownMessage && (
-                  <div className="bg-black/50 text-white text-sm px-3 py-1 rounded-full">
-                    {countdownMessage}
-                  </div>
-                )}
               </div>
             )}
-
-            {/* Simulation notice */}
-            <div className="absolute top-2 right-2 bg-blue-600/90 text-white text-xs px-3 py-1.5 rounded-full font-medium">
-              Demo Preview
-            </div>
           </div>
         </div>
 
@@ -931,7 +1086,7 @@ export const GenuineWidget: React.FC = () => {
                   : 'bg-gray-400'
             }`} />
             <span className="font-mono text-sm text-gray-600">
-              Demo Status:
+              Status:
             </span>
           </div>
           <span className="font-mono text-sm text-gray-900">
