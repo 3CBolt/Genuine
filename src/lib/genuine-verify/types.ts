@@ -4,7 +4,9 @@ export type DetectionState =
   | 'idle'
   | 'camera-active'
   | 'eyes-detected'
-  | 'blinking'
+  | 'head-tilt-left'
+  | 'head-tilt-right'
+  | 'head-tilt-success'
   | 'success'
   | 'failed'
   | 'recovering'
@@ -16,6 +18,21 @@ export interface FacePosition {
   height: number
 }
 
+export interface HeadTiltMetrics {
+  leftEyeY: number
+  rightEyeY: number
+  noseBridgeY: number
+  chinY: number
+  tiltAngle: number
+  tiltDirection: 'left' | 'right' | 'none'
+  isTilted: boolean
+  tiltStartTime: number | null
+  smoothedAngle: number
+  confidence: number
+  isStable: boolean
+  faceAlignment: number
+}
+
 export interface DetectionMetrics {
   timestamp: number
   eyeConfidence: number
@@ -23,6 +40,7 @@ export interface DetectionMetrics {
   rightEye: [number, number]
   facePosition: FacePosition
   eyesDetected: boolean
+  headTilt?: HeadTiltMetrics
 }
 
 export interface EyeState {
