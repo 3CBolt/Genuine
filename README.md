@@ -2,6 +2,9 @@
 
 A privacy-first human verification widget built with Next.js and TensorFlow.js. This widget provides a seamless, user-friendly way to verify human presence using face detection and gesture (head tilt) verification.
 
+**MVP Branch Note:**
+This branch implements robust, cross-browser human verification using BlazeFace for face detection and head tilt verification. The previous MediaPipe mesh model is no longer used due to compatibility issues. This is the recommended approach for maximum reliability.
+
 ## Features
 
 - Real-time face detection using BlazeFace (TensorFlow.js)
