@@ -8,7 +8,7 @@ interface GenuineUIProps {
   error: string | null
   errorDetails: string
   status: string
-  blinkCount: number
+  blinkCount?: number
   timeRemaining: number
   countdownMessage: string
   facePosition: { x: number; y: number; width: number; height: number } | null
@@ -113,15 +113,6 @@ export const GenuineUI: React.FC<GenuineUIProps> = ({
               }
             </span>
           </div>
-
-          {/* Blink Counter */}
-          {detectionState === 'blinking' && (
-            <div className="absolute top-2 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-1">
-              <div className="bg-black/50 text-white text-lg font-mono px-4 py-1 rounded-full">
-                Blinks: {blinkCount}/3
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

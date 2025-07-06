@@ -1,4 +1,4 @@
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection'
+import { BlazeFaceModel, BlazeFacePrediction } from './blazeface'
 
 export type DetectionState = 
   | 'idle'
@@ -48,8 +48,8 @@ export interface EyeState {
   right: number
 }
 
-export type FaceMeshModel = faceLandmarksDetection.FaceLandmarksDetector
-export type FaceMeshPrediction = Awaited<ReturnType<FaceMeshModel['estimateFaces']>>[0]
+export type FaceDetectionModel = BlazeFaceModel
+export type FaceDetectionPrediction = BlazeFacePrediction
 
 export interface CameraState {
   isCameraActive: boolean
@@ -83,5 +83,5 @@ export interface DetectionCallbacks {
   onStateChange: (state: DetectionState) => void
   onBlinkDetected: () => void
   onError: (error: Error, context: string) => void
-  onMetricsUpdate: (metrics: DetectionMetrics, face: FaceMeshPrediction) => void
+  onMetricsUpdate: (metrics: DetectionMetrics, face: FaceDetectionPrediction) => void
 } 

@@ -1,11 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import * as tf from '@tensorflow/tfjs'
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection'
-import '@tensorflow/tfjs-core'
-import '@tensorflow/tfjs-backend-webgl'
-import { DetectionState, DetectionMetrics, FaceMeshModel, FaceMeshPrediction, EyeState, FacePosition, HeadTiltMetrics } from '../types'
+import { DetectionState, DetectionMetrics, FaceDetectionModel, FaceDetectionPrediction, EyeState, FacePosition, HeadTiltMetrics } from '../types'
 import { cleanup, startCamera } from '../camera'
-import * as blazeface from '@tensorflow-models/blazeface'
+import { loadBlazeFaceModel, detectFaces, calculateHeadTilt, isModelLoaded, isModelLoading, clearModel, coordsFromTensor1D, isTensor1D } from '../blazeface'
+import { isHeadTilted, isBlinking, NormalizedKeypoint } from '../gesture'
+import { usePresenceToken, saveTokenToStorage, getStoredToken, clearStoredToken } from '../usePresenceToken'
+import { getPresenceToken } from '../presence'
 
 const REQUIRED_STABLE_FRAMES = 5
 const MAX_MISSED_FRAMES = 3
@@ -19,19 +18,6 @@ const TILT_BUFFER_SIZE = 5
 const TILT_ANGLE_THRESHOLD = 15
 const TILT_DIRECTION_THRESHOLD = 0.7 // 70% of frames must agree on direction
 
-// MediaPipe FaceMesh landmarks for head tilt detection
-const LANDMARKS = {
-  LEFT_EYE_OUTER: 33,
-  RIGHT_EYE_OUTER: 263,
-  NOSE_BRIDGE: 168,
-  CHIN: 152,
-  LEFT_EYE_INNER: 133,
-  RIGHT_EYE_INNER: 362,
-  LEFT_EAR: 234,
-  RIGHT_EAR: 454,
-  FOREHEAD: 10
-}
-
 // Interface for tilt buffer
 interface TiltBuffer {
   angles: number[]
@@ -44,14 +30,28 @@ interface GenuineDetectionOptions {
   canvasElement?: HTMLCanvasElement
 }
 
-export function useGenuineDetection(options?: GenuineDetectionOptions) {
+export function useGenuineDetection(options?: GenuineDetectionOptions & {
+  gestureType?: 'blink' | 'headTilt',
+  blinkThreshold?: number,
+  headTiltThreshold?: number,
+  onSuccess?: (token: string) => void,
+  persist?: boolean
+}) {
+  const gestureType = options?.gestureType || 'headTilt';
+  const blinkThreshold = options?.blinkThreshold ?? 0.2;
+  const headTiltThreshold = options?.headTiltThreshold ?? 15;
+  const onSuccess = options?.onSuccess;
+  const persist = options?.persist;
+  const { token: storedToken, isValid: isStoredTokenValid, saveToken, clearToken, getStoredToken } = usePresenceToken(persist);
+  const [verified, setVerified] = useState<boolean>(false);
+
   // Core state
   const [detectionState, setDetectionState] = useState<DetectionState>('idle')
   const [isCameraActive, setIsCameraActive] = useState(false)
-  const [isModelLoaded, setIsModelLoaded] = useState(false)
+  const [modelLoaded, setModelLoaded] = useState(false)
+  const [modelLoading, setModelLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<string>('')
-  const [isModelLoading, setIsModelLoading] = useState(true)
   
   // Detection state
   const [status, setStatus] = useState<string>('Click to start verification')
@@ -69,7 +69,7 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
   // Refs - use injected elements if provided, otherwise use refs
   const videoRef = useRef<HTMLVideoElement | null>(options?.videoElement || null)
   const canvasRef = useRef<HTMLCanvasElement | null>(options?.canvasElement || null)
-  const modelRef = useRef<FaceMeshModel | null>(null)
+  const modelRef = useRef<FaceDetectionModel | null>(null)
   const detectionIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recoveryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -117,19 +117,6 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     
     const directionConfidence = directionCounts[dominantDirection] / TILT_BUFFER_SIZE
 
-    // Log validation details in debug mode
-    if (process.env.NODE_ENV === 'development') {
-      console.debug('Tilt validation:', {
-        avgAngle,
-        dominantDirection,
-        directionConfidence,
-        currentDirection: currentTilt.tiltDirection,
-        isStable: Math.abs(avgAngle) > TILT_ANGLE_THRESHOLD &&
-          directionConfidence > TILT_DIRECTION_THRESHOLD &&
-          currentTilt.tiltDirection === dominantDirection
-      })
-    }
-
     return (
       Math.abs(avgAngle) > TILT_ANGLE_THRESHOLD &&
       directionConfidence > TILT_DIRECTION_THRESHOLD &&
@@ -163,38 +150,32 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     }
   }, [])
 
-  const calculateHeadTilt = useCallback((face: FaceMeshPrediction): HeadTiltMetrics => {
-    const keypoints = face.keypoints
-    const leftEye = keypoints[LANDMARKS.LEFT_EYE_OUTER]
-    const rightEye = keypoints[LANDMARKS.RIGHT_EYE_OUTER]
-    const noseBridge = keypoints[LANDMARKS.NOSE_BRIDGE]
-    const chin = keypoints[LANDMARKS.CHIN]
-
-    if (!leftEye || !rightEye || !noseBridge || !chin) {
-      return {
-        leftEyeY: 0,
-        rightEyeY: 0,
-        noseBridgeY: 0,
-        chinY: 0,
-        tiltAngle: 0,
-        tiltDirection: 'none',
-        isTilted: false,
-        tiltStartTime: null,
-        smoothedAngle: 0,
-        confidence: 0,
-        isStable: false,
-        faceAlignment: 0
-      }
-    }
-
-    // Calculate vertical difference between eyes
-    const eyeDeltaY = Math.abs(leftEye.y - rightEye.y)
-    const faceHeight = Math.abs(noseBridge.y - chin.y)
-    const tiltAngle = Math.atan2(eyeDeltaY, faceHeight) * (180 / Math.PI)
+  const calculateHeadTiltMetrics = useCallback((leftEyeRaw: any, rightEyeRaw: any): HeadTiltMetrics => {
+    let leftEye: [number, number] | null = null;
+    let rightEye: [number, number] | null = null;
+    if (isTensor1D(leftEyeRaw)) leftEye = coordsFromTensor1D(leftEyeRaw);
+    else if (Array.isArray(leftEyeRaw) && leftEyeRaw.length === 2) leftEye = leftEyeRaw as [number, number];
+    if (isTensor1D(rightEyeRaw)) rightEye = coordsFromTensor1D(rightEyeRaw);
+    else if (Array.isArray(rightEyeRaw) && rightEyeRaw.length === 2) rightEye = rightEyeRaw as [number, number];
+    if (!leftEye || !rightEye) return {
+      leftEyeY: 0,
+      rightEyeY: 0,
+      noseBridgeY: 0,
+      chinY: 0,
+      tiltAngle: 0,
+      tiltDirection: 'none',
+      isTilted: false,
+      tiltStartTime: null,
+      smoothedAngle: 0,
+      confidence: 0,
+      isStable: false,
+      faceAlignment: 0
+    };
+    const tiltAngle = calculateHeadTilt(leftEye, rightEye);
     
     // Determine tilt direction
-    const tiltDirection = leftEye.y < rightEye.y ? 'left' : 'right'
-    const isTilted = tiltAngle > HEAD_TILT_THRESHOLD
+    const tiltDirection = leftEye[1] < rightEye[1] ? 'left' : 'right'
+    const isTilted = Math.abs(tiltAngle) > HEAD_TILT_THRESHOLD
 
     // Update tilt buffer
     tiltBuffer.current = {
@@ -217,10 +198,10 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
 
     // Validate tilt stability
     const isStable = validateTilt({
-      leftEyeY: leftEye.y,
-      rightEyeY: rightEye.y,
-      noseBridgeY: noseBridge.y,
-      chinY: chin.y,
+      leftEyeY: leftEye[1],
+      rightEyeY: rightEye[1],
+      noseBridgeY: 0, // Not available in BlazeFace
+      chinY: 0, // Not available in BlazeFace
       tiltAngle,
       tiltDirection,
       isTilted,
@@ -232,10 +213,10 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     }, tiltBuffer.current)
 
     return {
-      leftEyeY: leftEye.y,
-      rightEyeY: rightEye.y,
-      noseBridgeY: noseBridge.y,
-      chinY: chin.y,
+      leftEyeY: leftEye[1],
+      rightEyeY: rightEye[1],
+      noseBridgeY: 0,
+      chinY: 0,
       tiltAngle,
       tiltDirection,
       isTilted,
@@ -247,7 +228,7 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     }
   }, [validateTilt])
 
-  const updateDetectionState = useCallback((metrics: DetectionMetrics, face: FaceMeshPrediction) => {
+  const updateDetectionState = useCallback((metrics: DetectionMetrics) => {
     detectionBuffer.current = [
       ...detectionBuffer.current.slice(-(BUFFER_SIZE - 1)),
       metrics
@@ -271,7 +252,6 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
 
       if (stableDetectionFrames.current >= REQUIRED_STABLE_FRAMES && detectionState === 'eyes-detected') {
         if (isLowConfidence) {
-          console.debug('Proceeding with low confidence detection')
           setStatus('Eyes detected (low confidence)')
         }
         setDetectionState('head-tilt-left')
@@ -294,7 +274,6 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
   }, [detectionState, clearDetectionInterval])
 
   const handleDetectionError = useCallback((error: Error, context: string) => {
-    console.error(`Detection error (${context}):`, error)
     setError(`Detection error: ${error.message}`)
     setErrorDetails(`Context: ${context}\nStack: ${error.stack || 'No stack trace'}`)
     setDetectionState('failed')
@@ -302,48 +281,11 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     clearDetectionInterval()
   }, [clearDetectionInterval])
 
-  const validateFaceData = useCallback((face: FaceMeshPrediction): boolean => {
-    try {
-      if (!face || !face.keypoints) {
-        console.debug('No face or keypoints found')
-        return false
-      }
-
-      const keypoints = face.keypoints
-      if (keypoints.length < 1) {
-        console.debug('No face keypoints found')
-        return false
-      }
-
-      // Check if we have all required landmarks
-      const requiredLandmarks = [
-        LANDMARKS.LEFT_EYE_OUTER,
-        LANDMARKS.RIGHT_EYE_OUTER,
-        LANDMARKS.NOSE_BRIDGE,
-        LANDMARKS.CHIN
-      ]
-
-      for (const landmark of requiredLandmarks) {
-        const keypoint = keypoints[landmark]
-        if (!keypoint || typeof keypoint.x !== 'number' || typeof keypoint.y !== 'number') {
-          console.debug('Invalid keypoint format:', keypoint)
-          return false
-        }
-      }
-
-      return true
-    } catch (err) {
-      console.error('Face validation error:', err)
-      return false
-    }
-  }, [])
-
   // Draw dynamic overlays for face detection and framing guide
-  const drawDebugOverlay = useCallback((face: FaceMeshPrediction | null) => {
+  const drawDebugOverlay = useCallback((face: FaceDetectionPrediction | null) => {
     const canvas = getCanvasElement()
     const video = getVideoElement()
     if (!canvas || !video) {
-      console.warn('drawDebugOverlay: canvas or video ref is null', { canvas, video })
       return
     }
     const ctx = canvas.getContext('2d')
@@ -366,66 +308,99 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     ctx.restore()
 
     if (!face) return
-
     // Draw bounding box
-    if (face.box) {
-      ctx.strokeStyle = 'lime'
-      ctx.lineWidth = 2
-      ctx.strokeRect(face.box.xMin, face.box.yMin, face.box.width, face.box.height)
+    const topLeft = Array.isArray(face.topLeft) ? face.topLeft : face.topLeft.arraySync()
+    const bottomRight = Array.isArray(face.bottomRight) ? face.bottomRight : face.bottomRight.arraySync()
+    const [x, y] = topLeft
+    const [x2, y2] = bottomRight
+    ctx.strokeStyle = 'lime'
+    ctx.lineWidth = 2
+    ctx.strokeRect(x, y, x2 - x, y2 - y)
+    // Draw eye landmarks
+    const landmarks = face.landmarks ? (Array.isArray(face.landmarks) ? face.landmarks : face.landmarks.arraySync()) : undefined
+    if (landmarks && landmarks.length >= 2) {
+      ctx.fillStyle = 'cyan'
+      landmarks.slice(0, 2).forEach((landmark: number[]) => {
+        if (landmark && landmark.length >= 2) {
+          ctx.beginPath()
+          ctx.arc(landmark[0], landmark[1], 4, 0, 2 * Math.PI)
+          ctx.fill()
+        }
+      })
     }
-
-    // Draw eyes and key landmarks
-    ctx.fillStyle = 'cyan'
-    const keypoints = face.keypoints
-    const landmarkIndices = [
-      LANDMARKS.LEFT_EYE_OUTER,
-      LANDMARKS.RIGHT_EYE_OUTER,
-      LANDMARKS.NOSE_BRIDGE,
-      LANDMARKS.CHIN,
-      LANDMARKS.LEFT_EYE_INNER,
-      LANDMARKS.RIGHT_EYE_INNER,
-      LANDMARKS.LEFT_EAR,
-      LANDMARKS.RIGHT_EAR,
-      LANDMARKS.FOREHEAD
-    ]
-    landmarkIndices.forEach(idx => {
-      const pt = keypoints[idx]
-      if (pt) {
-        ctx.beginPath()
-        ctx.arc(pt.x, pt.y, 4, 0, 2 * Math.PI)
-        ctx.fill()
-      }
-    })
   }, [getCanvasElement, getVideoElement])
 
-  // Detection loop using requestAnimationFrame
+  // Main detection loop using BlazeFace
   const detectionLoopRef = useRef<number | null>(null)
   const runDetectionLoop = useCallback(async () => {
     const videoElement = getVideoElement()
     if (!videoElement || !modelRef.current || !videoElement.srcObject) {
-      console.error('Video not ready or webcam feed unavailable')
       detectionLoopRef.current = requestAnimationFrame(runDetectionLoop)
       return
     }
+
     try {
-      console.log('Running model prediction')
-      const predictions = await modelRef.current.estimateFaces(videoElement)
-      console.log('Predictions result:', predictions)
-      if (!Array.isArray(predictions) || predictions.length === 0) {
-        console.warn('No faces detected this frame')
+      const result = await detectFaces(videoElement, modelRef.current)
+      
+      if (!result.isDetected) {
         drawDebugOverlay(null)
+        lastFaceDetectedTime.current = Date.now()
+        setStatus('Looking for your face...')
       } else {
-        drawDebugOverlay(predictions[0])
+        drawDebugOverlay(result.face)
+        lastFaceDetectedTime.current = Date.now()
+
+        // Create detection metrics
+        const metrics: DetectionMetrics = {
+          timestamp: Date.now(),
+          eyeConfidence: result.confidence,
+          leftEye: result.landmarks.leftEye || [0, 0],
+          rightEye: result.landmarks.rightEye || [0, 0],
+          facePosition: result.face ? {
+            x: Array.isArray(result.face.topLeft) ? result.face.topLeft[0] : result.face.topLeft.arraySync()[0],
+            y: Array.isArray(result.face.topLeft) ? result.face.topLeft[1] : result.face.topLeft.arraySync()[1],
+            width: (Array.isArray(result.face.bottomRight) ? result.face.bottomRight[0] : result.face.bottomRight.arraySync()[0]) - 
+                  (Array.isArray(result.face.topLeft) ? result.face.topLeft[0] : result.face.topLeft.arraySync()[0]),
+            height: (Array.isArray(result.face.bottomRight) ? result.face.bottomRight[1] : result.face.bottomRight.arraySync()[1]) -
+                   (Array.isArray(result.face.topLeft) ? result.face.topLeft[1] : result.face.topLeft.arraySync()[1])
+          } : { x: 0, y: 0, width: 0, height: 0 },
+          eyesDetected: !!(result.landmarks.leftEye && result.landmarks.rightEye)
+        }
+
+        // Calculate head tilt if eyes are detected
+        let leftEye = result.landmarks.leftEye;
+        let rightEye = result.landmarks.rightEye;
+        if (isTensor1D(leftEye)) leftEye = coordsFromTensor1D(leftEye);
+        if (isTensor1D(rightEye)) rightEye = coordsFromTensor1D(rightEye);
+        if (Array.isArray(leftEye) && Array.isArray(rightEye)) {
+          const headTilt = calculateHeadTiltMetrics(leftEye, rightEye);
+          metrics.headTilt = headTilt;
+
+          // Check for successful head tilt
+          if (headTilt.isTilted && headTilt.isStable) {
+            if (detectionState === 'head-tilt-left' || detectionState === 'head-tilt-right') {
+              setDetectionState('success');
+              setStatus('Human Verified');
+              const presenceToken = getPresenceToken(gestureType);
+              if (persist) saveToken(presenceToken);
+              setVerified(true);
+              onSuccess?.(presenceToken.token);
+            }
+          }
+        }
+
+        updateDetectionState(metrics)
       }
     } catch (err) {
-      console.error('Detection error in loop:', err)
+      handleDetectionError(err as Error, 'detection loop')
     }
+
     detectionLoopRef.current = requestAnimationFrame(runDetectionLoop)
-  }, [getVideoElement, drawDebugOverlay])
+  }, [getVideoElement, drawDebugOverlay, updateDetectionState, handleDetectionError, detectionState, onSuccess, persist])
 
   // Start detection loop after model and video are ready
   useEffect(() => {
-    if (isModelLoaded && isCameraActive) {
+    if (modelLoaded && isCameraActive) {
       if (detectionLoopRef.current) {
         cancelAnimationFrame(detectionLoopRef.current)
       }
@@ -436,39 +411,31 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
         }
       }
     }
-  }, [isModelLoaded, isCameraActive, runDetectionLoop])
+  }, [modelLoaded, isCameraActive, runDetectionLoop])
 
-  // Load TensorFlow and MediaPipe FaceMesh model
+  // Load BlazeFace model
   useEffect(() => {
     const loadModel = async () => {
       try {
-        setIsModelLoading(true)
+        setModelLoading(true)
         setError(null)
         setErrorDetails('')
-        // Use createDetector with tfjs runtime for MediaPipeFaceMesh
-        const model = await faceLandmarksDetection.createDetector(
-          faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
-          {
-            runtime: 'tfjs',
-            refineLandmarks: true,
-            maxFaces: 1
-          }
-        )
+        
+        const model = await loadBlazeFaceModel()
         modelRef.current = model
-        setIsModelLoaded(true)
-        setIsModelLoading(false)
-        console.log('Model loaded successfully')
-        console.log('Using model: MediaPipeFaceMesh')
+        setModelLoaded(true)
+        setModelLoading(false)
       } catch (err) {
-        console.error('Error loading face detection model:', err)
         setError('Failed to load face detection model. Please try refreshing the page.')
         setErrorDetails((err as Error).message)
-        setIsModelLoading(false)
-        setIsModelLoaded(false)
+        setModelLoading(false)
+        setModelLoaded(false)
       }
     }
     loadModel()
-    return () => handleCleanup()
+    return () => {
+      clearModel()
+    }
   }, [])
 
   const handleCleanup = useCallback(() => {
@@ -495,8 +462,8 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
 
   const handleStartCamera = useCallback(async () => {
     await startCamera({
-      isModelLoading,
-      isModelLoaded,
+      isModelLoading: modelLoading,
+      isModelLoaded: modelLoaded,
       modelRef,
       videoRef,
       setStatus,
@@ -509,7 +476,7 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
       setFacePosition,
       setEyesDetected
     })
-  }, [isModelLoading, isModelLoaded, startCamera])
+  }, [modelLoading, modelLoaded])
 
   useEffect(() => {
     // Remove static test box on mount
@@ -521,33 +488,6 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
       }
     }
   }, [getCanvasElement])
-
-  // Load BlazeFace model after video is ready
-  const blazeModelRef = useRef<any>(null)
-  useEffect(() => {
-    async function loadBlazeFaceModel() {
-      await tf.setBackend('webgl')
-      await tf.ready()
-      blazeModelRef.current = await blazeface.load()
-      console.log('BlazeFace model loaded successfully')
-    }
-    loadBlazeFaceModel()
-  }, [])
-
-  // Helper: update status
-  const updateStatus = useCallback((msg: string) => {
-    setStatus(msg)
-    // Optionally update a status element in the DOM
-    const el = document.getElementById('status')
-    if (el) el.innerText = msg
-  }, [])
-
-  // Helper: trigger success state
-  const triggerSuccessState = useCallback(() => {
-    setDetectionState('success')
-    updateStatus('Human Verified')
-    console.log('Human Verified — Proceeding to next step')
-  }, [updateStatus])
 
   // Set canvas size to match video when video is ready
   useEffect(() => {
@@ -567,76 +507,20 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     }
   }, [videoRef, canvasRef])
 
-  // BlazeFace detection loop
-  const detectWithBlazeFace = useCallback(async () => {
-    const videoElement = videoRef.current
-    const canvasElement = canvasRef.current
-    const model = blazeModelRef.current
-    if (
-      !model ||
-      !videoElement ||
-      !canvasElement ||
-      videoElement.videoWidth === 0 ||
-      videoElement.videoHeight === 0 ||
-      canvasElement.width === 0 ||
-      canvasElement.height === 0
-    ) {
-      requestAnimationFrame(detectWithBlazeFace)
-      return
-    }
-    const predictions = await model.estimateFaces(videoElement)
-    console.log('BlazeFace predictions:', predictions)
-    const ctx = canvasElement.getContext('2d')
-    if (!ctx) {
-      requestAnimationFrame(detectWithBlazeFace)
-      return
-    }
-    ctx.clearRect(0, 0, canvasElement.width, canvasElement.height)
-    if (predictions.length > 0) {
-      const face = predictions[0] as any
-      if (face.landmarks && face.topLeft && face.bottomRight) {
-        const leftEye = face.landmarks[0]
-        const rightEye = face.landmarks[1]
-        // Draw box
-        const [x, y] = face.topLeft
-        const [x2, y2] = face.bottomRight
-        ctx.strokeStyle = 'lime'
-        ctx.lineWidth = 2
-        ctx.strokeRect(x, y, x2 - x, y2 - y)
-        // Calculate head tilt
-        const tiltAngle = Math.atan2(
-          rightEye[1] - leftEye[1],
-          rightEye[0] - leftEye[0]
-        ) * (180 / Math.PI)
-        console.log('Head Tilt Angle:', tiltAngle)
-        if (Math.abs(tiltAngle) > 15) {
-          console.log('Head tilt detected — verification complete')
-          updateStatus('Human Verified')
-          triggerSuccessState()
-        } else {
-          updateStatus('Face detected. Please tilt your head slightly.')
-        }
-      }
-    } else {
-      updateStatus('Looking for your face...')
-      console.warn('No faces detected this frame')
-    }
-    requestAnimationFrame(detectWithBlazeFace)
-  }, [updateStatus, triggerSuccessState])
-
-  // Start detection loop after model and video are ready
+  // On mount, check for valid token if persist is true
   useEffect(() => {
-    if (modelRef.current && videoRef.current && canvasRef.current) {
-      detectWithBlazeFace()
+    if (persist && isStoredTokenValid && storedToken) {
+      setVerified(true);
+      onSuccess?.(storedToken.token);
     }
-  }, [modelRef.current, detectWithBlazeFace])
+  }, [persist, isStoredTokenValid, storedToken, onSuccess]);
 
   return {
     // State
     detectionState,
     isCameraActive,
-    isModelLoaded,
-    isModelLoading,
+    isModelLoaded: modelLoaded,
+    isModelLoading: modelLoading,
     error,
     errorDetails,
     status,
@@ -645,6 +529,7 @@ export function useGenuineDetection(options?: GenuineDetectionOptions) {
     facePosition,
     eyesDetected,
     positioningMessage,
+    verified,
 
     // Refs - only return refs if no elements were injected
     videoRef: options?.videoElement ? { current: options.videoElement } : videoRef,

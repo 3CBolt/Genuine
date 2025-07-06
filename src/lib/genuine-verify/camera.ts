@@ -1,4 +1,4 @@
-import { CameraState, DetectionState, FaceMeshModel } from './types'
+import { CameraState, DetectionState, FaceDetectionModel } from './types'
 
 // Camera setup, permissions, and cleanup logic will be implemented here.
 // Functions: startCamera, handleResetPermissions, cleanup, etc.
