@@ -89,6 +89,69 @@ function MyApp() {
 }
 ```
 
+## 🧩 Embeddable Widget
+
+The `GenuineWidgetEmbeddable` component provides a simplified API for easy integration:
+
+### Basic Usage
+```tsx
+import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk'
+
+function MyApp() {
+  const handleTokenIssued = (token: string) => {
+    console.log('Verification successful:', token)
+    // Handle the issued token
+  }
+
+  return (
+    <GenuineWidgetEmbeddable
+      onTokenIssued={handleTokenIssued}
+      tokenTTL={300}
+      debug={false}
+    />
+  )
+}
+```
+
+### Advanced Usage
+```tsx
+import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk'
+
+function MyApp() {
+  const [startFn, setStartFn] = useState(() => () => {})
+
+  return (
+    <div>
+      <button onClick={startFn}>Start Verification</button>
+      
+      <GenuineWidgetEmbeddable
+        onTokenIssued={(token) => console.log('Token:', token)}
+        onError={(error) => console.error('Error:', error)}
+        tokenTTL={600} // 10 minutes
+        debug={true}
+        trigger="manual"
+        onStartRef={(start) => setStartFn(() => start)}
+        headTiltThreshold={20}
+        persist={false}
+      />
+    </div>
+  )
+}
+```
+
+### Props Reference
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `onTokenIssued` | `(token: string) => void` | - | **Required**. Callback when token is issued |
+| `tokenTTL` | `number` | `300` | Token time-to-live in seconds |
+| `debug` | `boolean` | `false` | Show debug panel in development |
+| `headTiltThreshold` | `number` | `15` | Head tilt angle threshold (degrees) |
+| `persist` | `boolean` | `true` | Persist token in sessionStorage |
+| `trigger` | `'auto' \| 'manual'` | `'auto'` | When to start detection |
+| `onStartRef` | `(startFn: () => void) => void` | - | Get manual start function |
+| `onError` | `(error: Error) => void` | - | Error callback |
+
 ## ⚙️ Prop Reference
 
 | Prop | Type | Default | Required | Description |
@@ -317,6 +380,118 @@ genuine-verify/
 │   ├── components/
 │   │   ├── 
 
+## 📦 SDK Package
+
+### Installation
+
+The Genuine Verify SDK is available as an NPM package for easy integration:
+
+```bash
+npm install genuine-verify-sdk
+```
+
+### SDK Usage
+
+```tsx
+import { GenuineWidget } from 'genuine-verify-sdk'
+
+function MyApp() {
+  return (
+    <GenuineWidget
+      gestureType="headTilt"
+      onSuccess={(token) => console.log('Verified:', token)}
+      onError={(error) => console.error('Error:', error)}
+      debug={true}
+      persist={true}
+    />
+  )
+}
+```
+
+### SDK Development
+
+To work on the SDK locally:
+
+```bash
+# Build the SDK
+npm run build:sdk
+
+# Watch for changes
+npm run dev:sdk
+
+# Test linking
+cd packages/genuine-verify-sdk
+npm link
+cd ../..
+npm link genuine-verify-sdk
+```
+
+### SDK Structure
+
 ## License
 
 MIT
+
+## 📄 Token Utilities
+
+The SDK provides utility functions for token management:
+
+### Creating Tokens
+```typescript
+import { createPresenceToken } from 'genuine-verify-sdk'
+
+const token = createPresenceToken('headTilt', 300000) // 5 minutes
+console.log(token.token) // "uuid-string"
+```
+
+### Verifying Tokens
+```typescript
+import { verifyToken } from 'genuine-verify-sdk'
+
+// Client-side verification
+const result = await verifyToken(tokenString)
+if (result.valid) {
+  console.log('Token valid, expires in:', result.expiresIn, 'seconds')
+} else {
+  console.log('Token invalid:', result.reason)
+}
+
+// Server-side verification
+const result = await verifyToken(tokenString, {
+  baseUrl: 'https://your-api.com',
+  oneTimeUse: true
+})
+```
+
+### Storage Utilities
+```typescript
+import { 
+  storeToken, 
+  getStoredToken, 
+  clearStoredToken,
+  isStoredTokenValid 
+} from 'genuine-verify-sdk'
+
+// Store token
+storeToken(tokenString)
+
+// Retrieve token
+const token = getStoredToken()
+
+// Check if stored token is valid
+const isValid = await isStoredTokenValid()
+
+// Clear token
+clearStoredToken()
+```
+
+### Development Helpers
+```typescript
+import { createMockToken } from 'genuine-verify-sdk'
+
+// Create valid mock token
+const validToken = createMockToken('headTilt', false)
+
+// Create expired mock token
+const expiredToken = createMockToken('headTilt', true)
+```

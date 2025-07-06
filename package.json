@@ -2,12 +2,18 @@
   "name": "genuine-verify",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest"
+    "test": "jest",
+    "build:sdk": "cd packages/genuine-verify-sdk && npm run build",
+    "dev:sdk": "cd packages/genuine-verify-sdk && npm run dev",
+    "clean:sdk": "cd packages/genuine-verify-sdk && npm run clean"
   },
   "dependencies": {
     "@tensorflow-models/blazeface": "^0.1.0",
