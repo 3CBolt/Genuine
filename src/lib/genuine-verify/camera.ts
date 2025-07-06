@@ -101,7 +101,18 @@ export async function startCamera({
       },
       audio: false
     })
-    if (!videoRef.current) throw new Error('Video element not found')
+    // Wait for video element to be available
+    let attempts = 0
+    const maxAttempts = 10
+    while (!videoRef.current && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      attempts++
+    }
+    
+    if (!videoRef.current) {
+      throw new Error('Video element not found after multiple attempts. Please ensure the video element is properly rendered.')
+    }
+    
     videoRef.current.srcObject = stream
     try {
       await videoRef.current.play()

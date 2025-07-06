@@ -3,7 +3,7 @@ import { DetectionState, DetectionMetrics, FaceDetectionModel, FaceDetectionPred
 import { cleanup, startCamera } from '../camera'
 import { loadBlazeFaceModel, detectFaces, calculateHeadTilt, isModelLoaded, isModelLoading, clearModel, coordsFromTensor1D, isTensor1D } from '../blazeface'
 import { usePresenceToken } from '../usePresenceToken'
-import { getPresenceToken } from '../presence'
+import { getPresenceToken, isTokenExpired } from '../presence'
 
 const REQUIRED_STABLE_FRAMES = 5
 const MAX_MISSED_FRAMES = 3
@@ -30,21 +30,29 @@ interface GenuineDetectionOptions {
 }
 
 export function useGenuineDetection(options?: GenuineDetectionOptions & {
-  gestureType?: 'blink' | 'headTilt',
-  blinkThreshold?: number,
+  gestureType?: 'headTilt',
   headTiltThreshold?: number,
   onSuccess?: (token: string) => void,
   onError?: (error: Error) => void,
-  persist?: boolean
+  persist?: boolean,
+  trigger?: 'auto' | 'manual',
+  onStartRef?: (startFn: () => void) => void
 }) {
   const gestureType = options?.gestureType || 'headTilt';
-  const blinkThreshold = options?.blinkThreshold ?? 0.2;
   const headTiltThreshold = options?.headTiltThreshold ?? 15;
   const onSuccess = options?.onSuccess;
   const onError = options?.onError;
   const persist = options?.persist;
   const { token: storedToken, isValid: isStoredTokenValid, saveToken, clearToken, getStoredToken } = usePresenceToken(persist);
   const [verified, setVerified] = useState<boolean>(false);
+  const trigger = options?.trigger ?? 'auto';
+  const onStartRef = options?.onStartRef;
+
+  // Track manual start state
+  const [manualStarted, setManualStarted] = useState(trigger === 'auto');
+
+  // Track last head tilt metrics for debug
+  const [headTiltMetrics, setHeadTiltMetrics] = useState<HeadTiltMetrics | null>(null);
 
   // Core state
   const [detectionState, setDetectionState] = useState<DetectionState>('idle')
@@ -83,9 +91,9 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
   const tiltStartTime = useRef<number | null>(null)
   const lastTiltDirection = useRef<'left' | 'right' | 'none'>('none')
 
-  // Refs - use injected elements if provided, otherwise use refs
-  const videoRef = useRef<HTMLVideoElement | null>(options?.videoElement || null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(options?.canvasElement || null)
+  // Refs - create independent refs
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const modelRef = useRef<FaceDetectionModel | null>(null)
   const detectionIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recoveryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -100,6 +108,9 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
   // Throttle log state
   const lastLogTime = useRef(0)
   const LOG_THROTTLE_MS = 500
+  
+  // Track reset state to prevent immediate onSuccess calls
+  const isResetting = useRef(false)
 
   // Framing box config
   const FRAMING_BOX_COLOR = 'rgba(0,200,255,0.3)'
@@ -109,6 +120,57 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
   const NO_FACE_GUIDE_TIMEOUT = 3000
   const [framingGuideMessage, setFramingGuideMessage] = useState('')
   const lastFaceDetectedTime = useRef(Date.now())
+
+  // Enhanced FPS tracking with frame counting
+  const frameCount = useRef<number>(0)
+  const fpsStartTime = useRef<number>(0)
+  const fpsUpdateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  
+  // Throttled FPS updates (every 200ms)
+  const updateFpsThrottled = useCallback((newFps: number) => {
+    if (fpsUpdateTimeout.current) {
+      clearTimeout(fpsUpdateTimeout.current)
+    }
+    
+    fpsUpdateTimeout.current = setTimeout(() => {
+      setFps(newFps)
+    }, 200)
+  }, [])
+
+  // Calculate FPS over 1-second intervals
+  const calculateFps = useCallback(() => {
+    const now = performance.now()
+    
+    if (fpsStartTime.current === 0) {
+      fpsStartTime.current = now
+      frameCount.current = 0
+      return
+    }
+    
+    frameCount.current++
+    
+    const elapsed = now - fpsStartTime.current
+    if (elapsed >= 1000) { // 1 second interval
+      const calculatedFps = Math.round((frameCount.current * 1000) / elapsed)
+      updateFpsThrottled(calculatedFps)
+      
+      // Reset for next interval
+      fpsStartTime.current = now
+      frameCount.current = 0
+    }
+  }, [updateFpsThrottled])
+
+  // Calculate confidence based on head tilt proximity to threshold
+  const calculateHeadTiltConfidence = useCallback((tiltAngle: number, threshold: number): number => {
+    if (Math.abs(tiltAngle) === 0) return 0
+    
+    // Normalize to 0-1 scale based on proximity to threshold
+    const normalizedAngle = Math.abs(tiltAngle) / threshold
+    const confidence = Math.min(normalizedAngle, 1.0) // Cap at 100%
+    
+    // Apply smoothing curve for better UX
+    return Math.round(confidence * 100)
+  }, [])
 
   // Add tilt validation function
   const validateTilt = useCallback((
@@ -141,15 +203,15 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     )
   }, [])
 
-  // Get the current video element, preferring the injected one if available
+  // Get the current video element
   const getVideoElement = useCallback((): HTMLVideoElement | null => {
-    return options?.videoElement || videoRef.current
-  }, [options?.videoElement])
+    return videoRef.current
+  }, [])
 
-  // Get the current canvas element, preferring the injected one if available
+  // Get the current canvas element
   const getCanvasElement = useCallback((): HTMLCanvasElement | null => {
-    return options?.canvasElement || canvasRef.current
-  }, [options?.canvasElement])
+    return canvasRef.current
+  }, [])
 
   // UI state
   const [facePosition, setFacePosition] = useState<FacePosition | null>(null)
@@ -167,8 +229,12 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     }
   }, [])
 
-  // Reset detection state function for debug panel
+  // Enhanced reset function that clears all internal state
   const resetDetectionState = useCallback(() => {
+    // Set reset flag to prevent immediate onSuccess calls
+    isResetting.current = true
+    
+    // Reset all UI state
     setDetectionState('idle')
     setStatus('Click to start verification')
     setGestureMatched(false)
@@ -178,6 +244,34 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     setFacePosition(null)
     setEyesDetected(false)
     setPositioningMessage('')
+    setFramingGuideMessage('')
+    
+    // Reset verified state - this is crucial for token clearing
+    setVerified(false)
+    
+    // Reset unified detection state
+    setUnifiedDetectionState({
+      hasFace: false,
+      hasEyes: false,
+      gestureMatched: false,
+      isStable: false,
+      confidence: 0,
+      lastUpdate: 0
+    })
+    
+    // Reset debug state
+    setFps(0)
+    setLastFrameTime(0)
+    
+    // Reset FPS tracking
+    frameCount.current = 0
+    fpsStartTime.current = 0
+    if (fpsUpdateTimeout.current) {
+      clearTimeout(fpsUpdateTimeout.current)
+      fpsUpdateTimeout.current = null
+    }
+    
+    // Reset all refs
     stableDetectionFrames.current = 0
     missedFrames.current = 0
     lastStableDetectionTime.current = 0
@@ -189,8 +283,25 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
       directions: [],
       timestamps: []
     }
+
     detectionBuffer.current = []
+    lastFaceDetectedTime.current = Date.now()
+    
+    // Clear intervals and timeouts
     clearDetectionInterval()
+    if (recoveryTimeoutRef.current) {
+      clearTimeout(recoveryTimeoutRef.current)
+      recoveryTimeoutRef.current = null
+    }
+    if (detectionLoopRef.current) {
+      cancelAnimationFrame(detectionLoopRef.current)
+      detectionLoopRef.current = null
+    }
+    
+    // Clear reset flag after a short delay to allow fresh detection
+    setTimeout(() => {
+      isResetting.current = false
+    }, 1000)
   }, [clearDetectionInterval])
 
   const calculateHeadTiltMetrics = useCallback((leftEyeRaw: any, rightEyeRaw: any): HeadTiltMetrics => {
@@ -385,14 +496,9 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
       return
     }
 
-    // Calculate FPS
-    const now = performance.now()
-    if (lastFrameTime > 0) {
-      const frameTime = now - lastFrameTime
-      const currentFps = Math.round(1000 / frameTime)
-      setFps(currentFps)
-    }
-    setLastFrameTime(now)
+    // Enhanced FPS calculation
+    calculateFps()
+    setLastFrameTime(performance.now())
 
     try {
       const result = await detectFaces(videoElement, modelRef.current)
@@ -443,7 +549,7 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
           eyesDetected: !!(result.landmarks.leftEye && result.landmarks.rightEye)
         }
 
-        // Calculate head tilt if eyes are detected
+        // Calculate gesture detection based on gestureType
         let leftEye = result.landmarks.leftEye;
         let rightEye = result.landmarks.rightEye;
         if (isTensor1D(leftEye)) leftEye = coordsFromTensor1D(leftEye);
@@ -457,11 +563,15 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
         let isStable = false;
         
         if (hasEyes) {
+          // Head tilt detection (only supported gesture)
           const headTilt = calculateHeadTiltMetrics(leftEye, rightEye);
           metrics.headTilt = headTilt;
+          setHeadTiltMetrics(headTilt);
 
-          // Update debug values
-          setConfidenceScore(headTilt.confidence)
+          // Enhanced confidence calculation based on tilt proximity
+          const tiltConfidence = calculateHeadTiltConfidence(headTilt.tiltAngle, headTiltThreshold)
+          setConfidenceScore(tiltConfidence)
+          
           gestureMatched = headTilt.isTilted && headTilt.isStable;
           confidence = headTilt.confidence;
           isStable = headTilt.isStable;
@@ -475,7 +585,11 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
               const presenceToken = getPresenceToken(gestureType);
               if (persist) saveToken(presenceToken);
               setVerified(true);
-              onSuccess?.(presenceToken.token);
+              
+              // Only call onSuccess if we're not in a reset state
+              if (!isResetting.current) {
+                onSuccess?.(presenceToken.token);
+              }
             }
           }
         } else {
@@ -503,11 +617,65 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     }
 
     detectionLoopRef.current = requestAnimationFrame(runDetectionLoop)
-  }, [getVideoElement, drawDebugOverlay, updateDetectionState, handleDetectionError, detectionState, onSuccess, persist, lastFrameTime])
+  }, [getVideoElement, drawDebugOverlay, updateDetectionState, handleDetectionError, detectionState, onSuccess, persist, calculateFps, calculateHeadTiltConfidence, headTiltThreshold])
 
-  // Start detection loop after model and video are ready
+  // On mount, check for valid token if persist: true
   useEffect(() => {
-    if (modelLoaded && isCameraActive) {
+    if (persist && storedToken && !isTokenExpired(storedToken)) {
+      setVerified(true)
+      // Only call onSuccess if we're not in a reset state
+      if (!isResetting.current) {
+        onSuccess?.(storedToken.token)
+      }
+      // Skip detection/model/camera logic
+      return
+    }
+  }, [persist, storedToken, onSuccess])
+
+  // Enhanced clearToken function that resets all state
+  const enhancedClearToken = useCallback(() => {
+    // Clear the stored token
+    clearToken()
+    
+    // Reset all internal state immediately
+    resetDetectionState()
+    
+    // Ensure camera and detection are ready to restart
+    if (modelLoaded && !isCameraActive) {
+      setStatus('Click to start verification')
+    }
+  }, [clearToken, resetDetectionState, modelLoaded, isCameraActive])
+
+  // Watch for token changes and handle state transitions
+  useEffect(() => {
+    // If token was cleared and we were verified, ensure we restart detection
+    if (!storedToken && verified) {
+      setVerified(false)
+      setStatus('Click to start verification')
+      
+      // If camera was active, restart it
+      if (modelLoaded && !isCameraActive) {
+        setDetectionState('idle')
+      }
+    }
+  }, [storedToken, verified, modelLoaded, isCameraActive])
+
+  // Manual start function
+  const manualStartFn = useCallback(() => {
+    setManualStarted(true);
+  }, []);
+
+  // Expose manualStartFn via onStartRef
+  useEffect(() => {
+    if (onStartRef) {
+      onStartRef(manualStartFn);
+    }
+  }, [onStartRef, manualStartFn]);
+
+  // Only run detection/model/camera logic if not verified and (auto or manualStarted)
+  useEffect(() => {
+    if (verified) return;
+    if ((trigger === 'auto' || manualStarted) && modelLoaded && isCameraActive) {
       if (detectionLoopRef.current) {
         cancelAnimationFrame(detectionLoopRef.current)
       }
@@ -518,7 +686,7 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
         }
       }
     }
-  }, [modelLoaded, isCameraActive, runDetectionLoop])
+  }, [modelLoaded, isCameraActive, runDetectionLoop, verified, trigger, manualStarted])
 
   // Load BlazeFace model
   useEffect(() => {
@@ -618,22 +786,6 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     }
   }, [videoRef, canvasRef])
 
-  // On mount, check for valid token if persist is true
-  useEffect(() => {
-    if (persist && isStoredTokenValid && storedToken) {
-      setVerified(true);
-      onSuccess?.(storedToken.token);
-    }
-  }, [persist, isStoredTokenValid, storedToken, onSuccess]);
-
-  // Status message function based on unified detection state
-  const getStatusMessage = useCallback((state: UnifiedDetectionState): string => {
-    if (!state.hasFace) return "Looking for your face..."
-    if (!state.hasEyes) return "Looking for your eyes..."
-    if (!state.gestureMatched) return "Tilt your head slightly left or right to verify you're human."
-    return "✅ Gesture verified!"
-  }, [])
-
   // Auto-reset logic after success
   useEffect(() => {
     if (unifiedDetectionState.gestureMatched) {
@@ -648,6 +800,14 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
       return () => clearTimeout(timeout)
     }
   }, [unifiedDetectionState.gestureMatched])
+
+  // Status message function based on unified detection state
+  const getStatusMessage = useCallback((state: UnifiedDetectionState): string => {
+    if (!state.hasFace) return "Looking for your face..."
+    if (!state.hasEyes) return "Looking for your eyes..."
+    if (!state.gestureMatched) return "Tilt your head slightly left or right to verify you're human."
+    return "✅ Gesture verified!"
+  }, [])
 
   return {
     // State
@@ -686,6 +846,8 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     handleCleanup,
     clearDetectionInterval,
     resetDetectionState,
-    clearToken
+    clearToken: enhancedClearToken,
+    headTiltMetrics,
+    manualStartFn
   }
 } 

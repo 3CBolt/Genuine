@@ -4,11 +4,16 @@ import { isTokenExpired } from './presence'
 
 const TOKEN_KEY = 'genuine-presence-token'
 
+// SSR-safe localStorage access
+const isClient = typeof window !== 'undefined'
+
 export function saveTokenToStorage(token: PresenceToken): void {
+  if (!isClient) return
   localStorage.setItem(TOKEN_KEY, JSON.stringify(token))
 }
 
 export function getStoredToken(): PresenceToken | null {
+  if (!isClient) return null
   const raw = localStorage.getItem(TOKEN_KEY)
   if (!raw) return null
   try {
@@ -25,6 +30,7 @@ export function getStoredToken(): PresenceToken | null {
 }
 
 export function clearStoredToken(): void {
+  if (!isClient) return
   localStorage.removeItem(TOKEN_KEY)
 }
 

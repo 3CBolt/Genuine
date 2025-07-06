@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useGenuineDetection } from '@/lib/genuine-verify/hooks/useGenuineDetection'
 import { usePresenceToken } from '@/lib/genuine-verify/usePresenceToken'
 import { GenuineUI } from './GenuineUI'
@@ -17,6 +17,8 @@ export interface GenuineWidgetProps {
   headTiltThreshold?: number;
   showGestureFeedback?: boolean;
   persist?: boolean;
+  trigger?: 'auto' | 'manual';
+  onStartRef?: (startFn: () => void) => void;
 }
 
 const SuccessScreen: React.FC<{ expiresAt?: string }> = ({ expiresAt }) => (
@@ -47,15 +49,15 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
     return <div className="text-red-600 p-4">Error: Invalid gestureType</div>
   }
 
+  // Blink detection is now supported
   if (props.gestureType === 'blink') {
-    const error = new Error('Blink detection is not yet implemented. Please use headTilt for now.')
-    props.onError?.(error)
-    return <div className="text-yellow-600 p-4">⚠️ Blink detection coming soon. Please use headTilt for now.</div>
+    // No error - blink detection is implemented
   }
 
   const blinkThreshold = props.blinkThreshold ?? DEFAULT_THRESHOLDS.blinkThreshold;
   const headTiltThreshold = props.headTiltThreshold ?? DEFAULT_THRESHOLDS.headTiltThreshold;
   const persist = props.persist ?? true;
+  const trigger = props.trigger ?? 'auto';
 
   const handleSuccess = (tokenString: string) => {
     const token: PresenceToken = {
@@ -90,17 +92,20 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
     gestureMatched,
     confidenceScore,
     fps,
+    headTiltMetrics,
     tokenStatus,
     resetDetectionState,
     clearToken,
-    unifiedDetectionState
+    unifiedDetectionState,
+    manualStartFn
   } = useGenuineDetection({
-    gestureType: props.gestureType,
-    blinkThreshold,
+    gestureType: 'headTilt', // Only headTilt is currently supported
     headTiltThreshold,
     onSuccess: handleSuccess,
     onError: props.onError,
-    persist
+    persist,
+    trigger,
+    onStartRef: props.onStartRef
   })
 
   const {
@@ -109,12 +114,16 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
     clearToken: clearStoredToken
   } = usePresenceToken(persist)
 
+  // Only show debug panel if debug is true and in development
   const showDebug = process.env.NODE_ENV === 'development' && !!props.debug
+  const [debugCollapsed, setDebugCollapsed] = useState(false)
+
   const debugPanel = showDebug ? (
     <DebugPanel
       gestureMatched={gestureMatched}
       confidenceScore={confidenceScore}
       fps={fps}
+      tiltMetrics={headTiltMetrics || undefined}
       unifiedDetectionState={unifiedDetectionState}
       tokenStatus={{
         token: tokenStatus.token || undefined,
@@ -122,16 +131,41 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
       }}
       resetDetectionState={resetDetectionState}
       clearToken={clearStoredToken}
+      isCollapsed={debugCollapsed}
+      onToggleCollapse={() => setDebugCollapsed((c) => !c)}
     />
   ) : null
 
   if (verified) {
-    return <>
-      <SuccessScreen expiresAt={token?.expiresAt} />
-      {debugPanel}
-    </>
+    return (
+      <>
+        <div className="verified-banner">
+          <span className="icon icon-check" /> Human verified with presence token
+        </div>
+        {debugPanel}
+      </>
+    )
   }
 
+  // If trigger is manual and no valid token, show Start Verification button
+  if (trigger === 'manual' && !(token && isValid)) {
+    return (
+      <>
+        <div className="flex flex-col items-center justify-center p-6">
+          <button
+            className="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 transition"
+            onClick={() => manualStartFn && manualStartFn()}
+            disabled={isModelLoading}
+          >
+            {isModelLoading ? 'Loading...' : 'Start Verification'}
+          </button>
+        </div>
+        {debugPanel}
+      </>
+    )
+  }
+
+  // Only render debugPanel once, after the main UI
   return (
     <>
       <GenuineUI

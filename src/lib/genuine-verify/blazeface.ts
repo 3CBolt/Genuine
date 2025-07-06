@@ -1,10 +1,28 @@
-import * as tf from '@tensorflow/tfjs'
-import * as blazeface from '@tensorflow-models/blazeface'
-import { Tensor1D, Tensor2D } from '@tensorflow/tfjs-core'
-import '@tensorflow/tfjs-backend-webgl'
+// Dynamic imports to prevent SSR issues
+let tf: any = null
+let blazeface: any = null
 
-export type BlazeFaceModel = blazeface.BlazeFaceModel
-export type BlazeFacePrediction = blazeface.NormalizedFace
+// Initialize TensorFlow.js only on client side
+const initTensorFlow = async () => {
+  if (typeof window === 'undefined') {
+    console.warn('TensorFlow.js cannot be initialized on server side')
+    return // Skip on server side
+  }
+  
+  if (!tf) {
+    try {
+      tf = await import('@tensorflow/tfjs')
+      blazeface = await import('@tensorflow-models/blazeface')
+      await import('@tensorflow/tfjs-backend-webgl')
+    } catch (error) {
+      console.error('Failed to load TensorFlow.js:', error)
+      throw error
+    }
+  }
+}
+
+export type BlazeFaceModel = any
+export type BlazeFacePrediction = any
 
 export interface BlazeFaceDetectionResult {
   face: BlazeFacePrediction | null
@@ -20,16 +38,16 @@ let modelInstance: BlazeFaceModel | null = null
 let _isModelLoading = false
 let modelLoadPromise: Promise<BlazeFaceModel> | null = null
 
-export function isTensor1D(x: any): x is Tensor1D {
+export function isTensor1D(x: any): x is any {
   return x != null && typeof x === 'object' && typeof x.rank === 'number' && x.rank === 1 && typeof x.arraySync === 'function';
 }
-function isTensor2D(x: any): x is Tensor2D {
+function isTensor2D(x: any): x is any {
   return x != null && typeof x === 'object' && typeof x.rank === 'number' && x.rank === 2 && typeof x.arraySync === 'function';
 }
 function isNumberTuple(x: any): x is [number, number] {
   return Array.isArray(x) && x.length === 2 && typeof x[0] === 'number' && typeof x[1] === 'number'
 }
-export function coordsFromTensor1D(t: Tensor1D | [number, number]): [number, number] {
+export function coordsFromTensor1D(t: any | [number, number]): [number, number] {
   if (isNumberTuple(t)) return t
   if (isTensor1D(t)) {
     const arr = t.arraySync() as number[]
@@ -37,7 +55,7 @@ export function coordsFromTensor1D(t: Tensor1D | [number, number]): [number, num
   }
   return [0, 0]
 }
-function landmarksToArray(landmarks: number[][] | Tensor2D): number[][] {
+function landmarksToArray(landmarks: number[][] | any): number[][] {
   if (isTensor2D(landmarks)) {
     return (landmarks.arraySync() as number[][])
   }
@@ -48,6 +66,11 @@ function landmarksToArray(landmarks: number[][] | Tensor2D): number[][] {
  * Loads the BlazeFace model. Returns cached instance if already loaded.
  */
 export async function loadBlazeFaceModel(): Promise<BlazeFaceModel> {
+  // Prevent SSR issues
+  if (typeof window === 'undefined') {
+    throw new Error('BlazeFace model cannot be loaded on server side')
+  }
+
   if (modelInstance) {
     return modelInstance
   }
@@ -59,6 +82,9 @@ export async function loadBlazeFaceModel(): Promise<BlazeFaceModel> {
   _isModelLoading = true
   modelLoadPromise = (async () => {
     try {
+      // Initialize TensorFlow.js
+      await initTensorFlow()
+      
       // Initialize TensorFlow backend
       await tf.setBackend('webgl')
       await tf.ready()
@@ -87,6 +113,22 @@ export async function detectFaces(
   videoElement: HTMLVideoElement,
   model?: BlazeFaceModel
 ): Promise<BlazeFaceDetectionResult> {
+  // Prevent SSR issues
+  if (typeof window === 'undefined') {
+    return {
+      face: null,
+      isDetected: false,
+      confidence: 0,
+      landmarks: {
+        leftEye: null,
+        rightEye: null
+      }
+    }
+  }
+
+  // Initialize TensorFlow.js if not already done
+  await initTensorFlow()
+  
   const detectionModel = model || modelInstance
   
   if (!detectionModel) {
@@ -134,14 +176,17 @@ export async function detectFaces(
         landmarks: landmarksArr
       },
       isDetected: true,
-      confidence: face.probability || 0,
+      confidence: face.probability ? Number(face.probability) : 0,
       landmarks: {
         leftEye: isNumberTuple(landmarksArr[0]) ? [landmarksArr[0][0], landmarksArr[0][1]] : null,
         rightEye: isNumberTuple(landmarksArr[1]) ? [landmarksArr[1][0], landmarksArr[1][1]] : null
       }
     }
   } catch (error) {
-    console.error('BlazeFace detection error:', error)
+    // Only log errors in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('BlazeFace detection error:', error)
+    }
     return {
       face: null,
       isDetected: false,
