@@ -1,0 +1,70 @@
+{
+  "name": "genuine-verify-sdk",
+  "version": "0.1.0",
+  "description": "Privacy-first human verification widget using React, Next.js, and TensorFlow.js",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "type-check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": false
+    },
+    "react-dom": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "@tensorflow-models/blazeface": "^0.1.0",
+    "@tensorflow/tfjs": "^4.11.0",
+    "@tensorflow/tfjs-backend-webgl": "^4.11.0",
+    "seedrandom": "^3.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "human-verification",
+    "captcha-alternative",
+    "face-detection",
+    "gesture-verification",
+    "privacy-first",
+    "react",
+    "tensorflow",
+    "blazeface"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3CBolt/Genuine.git",
+    "directory": "packages/genuine-verify-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/3CBolt/Genuine/issues"
+  },
+  "homepage": "https://github.com/3CBolt/Genuine#readme"
+} 
