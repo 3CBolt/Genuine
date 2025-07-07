@@ -87,6 +87,39 @@ import {
 } from 'genuine-verify-sdk';
 ```
 
+## 🔍 Verification Status Hook
+
+Check human verification status with real-time updates:
+
+```ts
+import { useVerificationStatus } from 'genuine-verify-sdk'
+
+function MyApp() {
+  const { isVerified, token, expiresIn, timeRemaining, clearToken } = useVerificationStatus()
+
+  return (
+    <div>
+      {isVerified ? (
+        <div>
+          <p>✅ Human verified! Expires in {timeRemaining}</p>
+          <button onClick={clearToken}>Clear Verification</button>
+        </div>
+      ) : (
+        <p>❌ Human not verified</p>
+      )}
+    </div>
+  )
+}
+```
+
+**Hook Features:**
+- ✅ **Real-time updates:** Auto-updates every second when verified
+- ✅ **Live countdown:** Shows time remaining until expiration  
+- ✅ **Expiration warning:** Detects when token expires soon (≤60s)
+- ✅ **Token management:** Clear stored tokens
+- ✅ **Manual refresh:** Force status update
+- ✅ **TypeScript support:** Full type safety
+
 ### Example: Token Validation
 
 ```ts
@@ -163,36 +196,4 @@ function Demo() {
 
 ## 📝 Exports
 
-- `GenuineWidgetEmbeddable` (main widget)
-- `verifyToken`, `createPresenceToken`, `getStoredToken`, `storeToken`, `clearStoredToken`, `isStoredTokenValid`, `createMockToken`
-- Types: `PresenceToken`, `TokenValidationResult`, etc.
-
----
-
-## ⏱️ Get Started in <10 Minutes
-
-1. Install the SDK.
-2. Add `<GenuineWidgetEmbeddable />` to your app.
-3. Handle the token in `onTokenIssued`.
-4. Validate the token with `verifyToken()`.
-
----
-
-For more, see the [full API docs](./src/index.ts) or open an issue!
-
----
-
-## 🛠️ TypeScript Configuration Notes
-
-If you use TypeScript and want to avoid React import warnings, make sure your `tsconfig.json` includes these settings:
-
-```json
-{
-  "compilerOptions": {
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
-  }
-}
-```
-
-This is needed because of how TypeScript handles default imports from CommonJS modules like React. Most modern React/TypeScript setups already have these enabled by default.
+- `GenuineWidgetEmbeddable` (main wid

@@ -29,6 +29,8 @@ export type { TokenValidationResult, TokenError } from './lib/tokenUtils'
 export { useGenuineDetection } from './lib/hooks/useGenuineDetection'
 export { usePresenceToken } from './lib/usePresenceToken'
 export { useTokenTTL } from './lib/hooks/useTokenTTL'
+export { useVerificationStatus } from './lib/hooks/useVerificationStatus'
+export type { VerificationStatus } from './lib/hooks/useVerificationStatus'
 
 // Constants
 export { DEFAULT_THRESHOLDS } from './lib/config'
