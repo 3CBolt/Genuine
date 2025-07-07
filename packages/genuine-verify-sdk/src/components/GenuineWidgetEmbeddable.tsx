@@ -41,8 +41,8 @@ export interface GenuineWidgetEmbeddableProps {
   headTiltThreshold?: number
   /** Persist token in sessionStorage (default: true) */
   persist?: boolean
-  /** Trigger mode: 'auto' starts immediately, 'manual' requires user action */
-  trigger?: 'auto' | 'manual'
+  /** Trigger mode: 'auto' starts immediately, 'manual' requires user action, 'manualStart' requires explicit programmatic start */
+  trigger?: 'auto' | 'manual' | 'manualStart'
   /** Callback for manual start function */
   onStartRef?: (startFn: () => void) => void
   /** Callback for errors */

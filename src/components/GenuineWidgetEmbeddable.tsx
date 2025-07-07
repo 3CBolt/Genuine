@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useGenuineDetection } from '@/lib/genuine-verify/hooks/useGenuineDetection'
 import { usePresenceToken } from '@/lib/genuine-verify/usePresenceToken'
+import { useGenuineTrigger } from '@/lib/genuine-verify/hooks/useGenuineTrigger'
 import { GenuineUI } from './GenuineUI'
 import { DebugPanel } from './DebugPanel'
 import { DEFAULT_THRESHOLDS } from '@/lib/genuine-verify/config'
@@ -41,8 +42,8 @@ export interface GenuineWidgetEmbeddableProps {
   headTiltThreshold?: number
   /** Persist token in sessionStorage (default: true) */
   persist?: boolean
-  /** Trigger mode: 'auto' starts immediately, 'manual' requires user action */
-  trigger?: 'auto' | 'manual'
+  /** Trigger mode: 'auto' starts immediately, 'manual' requires user action, 'manualStart' requires explicit programmatic start */
+  trigger?: 'auto' | 'manual' | 'manualStart'
   /** Callback for manual start function */
   onStartRef?: (startFn: () => void) => void
   /** Callback for errors */
@@ -117,14 +118,6 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
     }
   }, [attempts, maxAttempts, onFailure])
 
-  // Retry function
-  const triggerRetry = useCallback(() => {
-    setAttempts(0)
-    setFailureContext(null)
-    resetDetectionState()
-    handleStartCamera()
-  }, [resetDetectionState, handleStartCamera])
-
   // Detection hook
   const {
     detectionState,
@@ -168,6 +161,28 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
     maxAttempts
   })
 
+  // Retry function (must be after detection hook)
+  const triggerRetry = useCallback(() => {
+    setAttempts(0)
+    setFailureContext(null)
+    resetDetectionState()
+    handleStartCamera()
+  }, [resetDetectionState, handleStartCamera])
+
+  // Trigger hook for programmatic control
+  const triggerControls = useGenuineTrigger(
+    handleStartCamera,
+    handleCleanup,
+    resetDetectionState,
+    isCameraActive,
+    isModelLoaded,
+    {
+      onStart: () => console.log('Detection started programmatically'),
+      onStop: () => console.log('Detection stopped programmatically'),
+      onReset: () => console.log('Detection reset programmatically')
+    }
+  )
+
   // Token management
   const {
     token,
@@ -201,6 +216,13 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
       handleStartCamera()
     }
   }, [trigger, verified, isModelLoaded, isCameraActive, handleStartCamera])
+
+  // Expose trigger controls for manualStart mode
+  useEffect(() => {
+    if (trigger === 'manualStart' && onStartRef) {
+      onStartRef(triggerControls.startDetection)
+    }
+  }, [trigger, onStartRef, triggerControls.startDetection])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -264,19 +286,31 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
   }
 
   // Manual trigger state
-  if (trigger === 'manual' && !(token && isValid)) {
+  if ((trigger === 'manual' || trigger === 'manualStart') && !(token && isValid)) {
     return (
       <>
         <div className="flex flex-col items-center justify-center p-6">
-          <button
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-700 transition-colors font-medium"
-            onClick={() => manualStartFn && manualStartFn()}
-            disabled={isModelLoading}
-          >
-            {isModelLoading ? 'Loading...' : 'Start Verification'}
-          </button>
-          {isModelLoading && (
-            <div className="text-sm text-gray-600 mt-2">Loading face detection model...</div>
+          {trigger === 'manual' && (
+            <button
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-700 transition-colors font-medium"
+              onClick={() => manualStartFn && manualStartFn()}
+              disabled={isModelLoading}
+            >
+              {isModelLoading ? 'Loading...' : 'Start Verification'}
+            </button>
+          )}
+          {trigger === 'manualStart' && (
+            <div className="text-center">
+              <div className="text-lg font-semibold text-gray-700 mb-2">
+                Verification Ready
+              </div>
+              <div className="text-sm text-gray-600">
+                Detection will start when triggered programmatically
+              </div>
+              {isModelLoading && (
+                <div className="text-sm text-gray-600 mt-2">Loading face detection model...</div>
+              )}
+            </div>
           )}
         </div>
         {debugPanel}

@@ -2,7 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Temporarily remove Tailwind to test if the app loads */
 body {
   margin: 0;
   padding: 0;

@@ -1,5 +1,9 @@
 # Genuine Verify SDK
 
+[![npm version](https://badge.fury.io/js/genuine-verify-sdk.svg)](https://badge.fury.io/js/genuine-verify-sdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
 A privacy-first, real-time human verification widget (anti-bot) for React apps. Uses TensorFlow.js and BlazeFace for gesture-based verification—no CAPTCHAs, no user friction.
 
 ---
@@ -15,6 +19,48 @@ yarn add genuine-verify-sdk
 **Peer dependencies:**  
 - React 18+
 - react-dom 18+
+
+---
+
+## 🚀 Quick Start
+
+```tsx
+import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk';
+
+function MyApp() {
+  const handleTokenIssued = (payload: {
+    token: string;
+    metadata: {
+      issuedAt: string;
+      expiresAt: string;
+      gestureType: string;
+    };
+  }) => {
+    // Send token to your backend or validate client-side
+    console.log('Token:', payload.token);
+    console.log('Metadata:', payload.metadata);
+  };
+
+  return (
+    <GenuineWidgetEmbeddable
+      onTokenIssued={handleTokenIssued}
+      tokenTTL={300}
+      debug={true}
+    />
+  );
+}
+```
+
+---
+
+## 📚 Documentation
+
+- [**Widget Usage**](#-widget-usage) - Main component and props
+- [**API / Presence Token**](#-utility-functions) - Token validation and utilities
+- [**Fallback Configuration**](#️-fallback-strategy) - Handle detection failures
+- [**Custom Trigger Support**](#-trigger-control) - Programmatic control
+- [**Verification Status**](#-verification-status-hook) - Real-time status tracking
+- [**Analytics (Dev Only)**](#-analytics-dev-only) - Development debugging
 
 ---
 
@@ -90,6 +136,19 @@ import {
 } from 'genuine-verify-sdk';
 ```
 
+### Example: Token Validation
+
+```ts
+const result = await verifyToken(token);
+if (result.valid) {
+  // Token is valid!
+} else {
+  // Token is invalid or expired
+}
+```
+
+---
+
 ## 🔍 Verification Status Hook
 
 Check human verification status with real-time updates:
@@ -122,6 +181,8 @@ function MyApp() {
 - ✅ **Token management:** Clear stored tokens
 - ✅ **Manual refresh:** Force status update
 - ✅ **TypeScript support:** Full type safety
+
+---
 
 ## 🛡️ Fallback Strategy
 
@@ -163,26 +224,93 @@ function MyApp() {
 - ✅ **triggerRetry function:** Exposed retry handler for "Try Again" buttons
 - ✅ **Default fallback UI:** Built-in error display when no custom component provided
 
-### Example: Token Validation
+---
 
-```ts
-const result = await verifyToken(token);
-if (result.valid) {
-  // Token is valid!
-} else {
-  // Token is invalid or expired
+## 🎯 Trigger Control
+
+Control when verification starts with flexible trigger modes:
+
+```tsx
+import { GenuineWidgetEmbeddable, useGenuineTrigger } from 'genuine-verify-sdk'
+
+function MyApp() {
+  const [startFunction, setStartFunction] = useState(null)
+
+  // Auto-start (default)
+  return (
+    <GenuineWidgetEmbeddable
+      onTokenIssued={handleTokenIssued}
+      trigger="auto"
+    />
+  )
+
+  // Manual button
+  return (
+    <GenuineWidgetEmbeddable
+      onTokenIssued={handleTokenIssued}
+      trigger="manual"
+    />
+  )
+
+  // Programmatic control
+  return (
+    <GenuineWidgetEmbeddable
+      onTokenIssued={handleTokenIssued}
+      trigger="manualStart"
+      onStartRef={setStartFunction}
+    />
+  )
 }
 ```
 
----
+**Advanced Programmatic Control:**
 
-## 🔁 Token Flow
+```tsx
+import { useGenuineTrigger } from 'genuine-verify-sdk'
 
-1. **User completes gesture** in widget.
-2. **Widget issues a presence token** (JWT-like JSON).
-3. **You validate the token**:
-   - Client-side: `verifyToken(token)`
-   - Server-side: POST to `/api/verify-human` (see below)
+function MyApp() {
+  const [startFunction, setStartFunction] = useState(null)
+  const [isDetectionActive, setIsDetectionActive] = useState(false)
+  const [isModelReady, setIsModelReady] = useState(false)
+
+  const triggerControls = useGenuineTrigger(
+    startFunction,
+    null, // stopFn
+    null, // resetFn
+    isDetectionActive,
+    isModelReady,
+    {
+      onStart: () => setIsDetectionActive(true),
+      onStop: () => setIsDetectionActive(false)
+    }
+  )
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault()
+    triggerControls.startDetection() // Trigger on form submit
+  }
+
+  return (
+    <form onSubmit={handleFormSubmit}>
+      <GenuineWidgetEmbeddable
+        onTokenIssued={handleTokenIssued}
+        trigger="manualStart"
+        onStartRef={setStartFunction}
+      />
+      <button type="submit">Submit Form</button>
+    </form>
+  )
+}
+```
+
+**Trigger Features:**
+- ✅ **Auto trigger:** Start detection immediately when widget loads
+- ✅ **Manual trigger:** User clicks button to start detection
+- ✅ **Manual start:** Programmatic control via start function
+- ✅ **useGenuineTrigger hook:** Provides programmatic control methods
+- ✅ **Status tracking:** Know when detection is active and model is ready
+- ✅ **Event callbacks:** onStart, onStop, onReset callbacks
+- ✅ **Flexible integration:** Trigger on form submit, route change, suspicious activity, etc.
 
 ---
 
@@ -239,22 +367,31 @@ function Demo() {
 
 ## 📝 Exports
 
+### Components
 - `GenuineWidgetEmbeddable` (main widget)
+
+### Utilities
 - `verifyToken`, `createPresenceToken`, `getStoredToken`, `storeToken`, `clearStoredToken`, `isStoredTokenValid`, `createMockToken`
-- Types: `PresenceToken`, `TokenValidationResult`, etc.
+
+### Hooks
+- `useVerificationStatus` - Real-time verification status
+- `useGenuineTrigger` - Programmatic trigger control
+- `useGenuineAnalytics` - Development analytics
+- `useTokenTTL` - Token expiration management
+- `usePresenceToken` - Token management
+- `useGenuineDetection` - Detection state management
+
+### Types
+- `PresenceToken`, `TokenValidationResult`, `FailureContext`, etc.
 
 ---
 
 ## ⏱️ Get Started in <10 Minutes
 
-1. Install the SDK.
-2. Add `<GenuineWidgetEmbeddable />` to your app.
-3. Handle the token in `onTokenIssued`.
-4. Validate the token with `verifyToken()`.
-
----
-
-For more, see the [full API docs](./src/index.ts) or open an issue!
+1. Install the SDK: `npm install genuine-verify-sdk`
+2. Add `<GenuineWidgetEmbeddable />` to your app
+3. Handle the token in `onTokenIssued`
+4. Validate the token with `verifyToken()`
 
 ---
 
@@ -272,3 +409,72 @@ If you use TypeScript and want to avoid React import warnings, make sure your `t
 ```
 
 This is needed because of how TypeScript handles default imports from CommonJS modules like React. Most modern React/TypeScript setups already have these enabled by default.
+
+---
+
+## 📊 Analytics (Dev Only)
+
+Track real-time detection analytics in development with the `useGenuineAnalytics` hook.
+
+```tsx
+import { useGenuineAnalytics } from 'genuine-verify-sdk'
+
+function AnalyticsPanel() {
+  // You need to pass detection state from your widget
+  const detectionState: AnalyticsDetectionState = {
+    isCameraActive: false,
+    gestureMatched: false,
+    detectionState: 'idle',
+    fps: 0
+  }
+  
+  const { successCount, failureCount, attemptCount, fps, lastEvent, clear } = useGenuineAnalytics(detectionState, {
+    persist: false, // Set true to persist to localStorage
+    logToConsole: true // Set false to disable console logs
+  })
+
+  return (
+    <div>
+      <h3>Analytics (Dev Only)</h3>
+      <ul>
+        <li>Successes: {successCount}</li>
+        <li>Failures: {failureCount}</li>
+        <li>Attempts: {attemptCount}</li>
+        <li>FPS: {fps}</li>
+        <li>Last Event: {lastEvent}</li>
+      </ul>
+      <button onClick={clear}>Clear Analytics</button>
+    </div>
+  )
+}
+```
+
+**Features:**
+- ✅ Real-time updates for detection attempts, successes, failures, and FPS
+- ✅ Lightweight, no server calls
+- ✅ Console logging (dev only)
+- ✅ Optional localStorage persistence (dev only)
+
+**Usage Notes:**
+- Analytics are only active in development (`NODE_ENV !== 'production'`).
+- No data is sent to any server—everything is client-side.
+- For privacy and performance, do **not** use analytics in production or for user-facing metrics.
+- You can disable console logging or localStorage with the hook options.
+- To extend analytics (e.g., custom events), use the `log` function returned by the hook.
+
+**Warning:**
+> Overuse of analytics in production can impact privacy and performance. This hook is intended for development and debugging only. Do not use for user tracking or telemetry.
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+For more information, visit our [GitHub repository](https://github.com/3CBolt/Genuine) or [report an issue](https://github.com/3CBolt/Genuine/issues).

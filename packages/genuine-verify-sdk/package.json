@@ -13,7 +13,10 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -54,17 +57,24 @@
     "privacy-first",
     "react",
     "tensorflow",
-    "blazeface"
+    "blazeface",
+    "anti-bot",
+    "verification",
+    "widget",
+    "typescript"
   ],
-  "author": "Your Name",
+  "author": "Cameron Bolton",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/3CBolt/Genuine.git",
+    "url": "git+https://github.com/3CBolt/Genuine.git",
     "directory": "packages/genuine-verify-sdk"
   },
   "bugs": {
     "url": "https://github.com/3CBolt/Genuine/issues"
   },
-  "homepage": "https://github.com/3CBolt/Genuine#readme"
-} 
+  "homepage": "https://github.com/3CBolt/Genuine#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

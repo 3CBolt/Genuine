@@ -30,7 +30,11 @@ export { useGenuineDetection } from './lib/hooks/useGenuineDetection'
 export { usePresenceToken } from './lib/usePresenceToken'
 export { useTokenTTL } from './lib/hooks/useTokenTTL'
 export { useVerificationStatus } from './lib/hooks/useVerificationStatus'
+export { useGenuineTrigger } from './lib/hooks/useGenuineTrigger'
+export { useGenuineAnalytics } from './lib/hooks/useGenuineAnalytics'
 export type { VerificationStatus } from './lib/hooks/useVerificationStatus'
+export type { GenuineTriggerControls, UseGenuineTriggerOptions } from './lib/hooks/useGenuineTrigger'
+export type { GenuineAnalytics, UseGenuineAnalyticsOptions, AnalyticsDetectionState } from './lib/hooks/useGenuineAnalytics'
 
 // Constants
 export { DEFAULT_THRESHOLDS } from './lib/config'
