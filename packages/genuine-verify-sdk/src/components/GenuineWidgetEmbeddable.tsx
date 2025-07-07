@@ -9,8 +9,15 @@ import { DEFAULT_THRESHOLDS } from '../lib/config'
 import { createPresenceToken } from '../lib/tokenUtils'
 
 export interface GenuineWidgetEmbeddableProps {
-  /** Callback when a valid token is issued */
-  onTokenIssued: (token: string) => void
+  /** Callback when a valid token is issued with metadata */
+  onTokenIssued: (payload: {
+    token: string;
+    metadata: {
+      issuedAt: string;
+      expiresAt: string;
+      gestureType: string;
+    };
+  }) => void
   /** Token time-to-live in seconds (default: 300) */
   tokenTTL?: number
   /** Show debug panel in development */

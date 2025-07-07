@@ -12,6 +12,7 @@ export interface GenuineWidgetProps {
   gestureType: 'blink' | 'headTilt';
   onSuccess: (token: PresenceToken) => void;
   onError?: (error: Error) => void;
+  onTokenExpired?: () => void;
   debug?: boolean;
   blinkThreshold?: number;
   headTiltThreshold?: number;
@@ -19,6 +20,9 @@ export interface GenuineWidgetProps {
   persist?: boolean;
   trigger?: 'auto' | 'manual';
   onStartRef?: (startFn: () => void) => void;
+  tokenTTL?: number; // Time to live in milliseconds (default: 5 minutes)
+  showExpirationWarning?: boolean; // Show UI warning before expiration
+  autoRefreshOnExpiry?: boolean; // Automatically trigger re-verification on expiry
 }
 
 export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {

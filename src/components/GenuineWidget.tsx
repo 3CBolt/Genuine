@@ -3,8 +3,10 @@
 import React, { useState } from 'react'
 import { useGenuineDetection } from '@/lib/genuine-verify/hooks/useGenuineDetection'
 import { usePresenceToken } from '@/lib/genuine-verify/usePresenceToken'
+import { useTokenTTL } from '@/lib/genuine-verify/hooks/useTokenTTL'
 import { GenuineUI } from './GenuineUI'
 import { DebugPanel } from './DebugPanel'
+import { ExpirationWarning } from './ExpirationWarning'
 import { DEFAULT_THRESHOLDS } from '@/lib/genuine-verify/config'
 import { PresenceToken } from '@/lib/genuine-verify/presence'
 
@@ -12,6 +14,7 @@ export interface GenuineWidgetProps {
   gestureType: 'blink' | 'headTilt';
   onSuccess: (token: PresenceToken) => void;
   onError?: (error: Error) => void;
+  onTokenExpired?: () => void;
   debug?: boolean;
   blinkThreshold?: number;
   headTiltThreshold?: number;
@@ -19,6 +22,9 @@ export interface GenuineWidgetProps {
   persist?: boolean;
   trigger?: 'auto' | 'manual';
   onStartRef?: (startFn: () => void) => void;
+  tokenTTL?: number; // Time to live in milliseconds (default: 5 minutes)
+  showExpirationWarning?: boolean; // Show UI warning before expiration
+  autoRefreshOnExpiry?: boolean; // Automatically trigger re-verification on expiry
 }
 
 const SuccessScreen: React.FC<{ expiresAt?: string }> = ({ expiresAt }) => (
@@ -58,13 +64,16 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
   const headTiltThreshold = props.headTiltThreshold ?? DEFAULT_THRESHOLDS.headTiltThreshold;
   const persist = props.persist ?? true;
   const trigger = props.trigger ?? 'auto';
+  const tokenTTL = props.tokenTTL ?? 300_000; // 5 minutes default
+  const showExpirationWarning = props.showExpirationWarning ?? false;
+  const autoRefreshOnExpiry = props.autoRefreshOnExpiry ?? false;
 
   const handleSuccess = (tokenString: string) => {
     const token: PresenceToken = {
       token: tokenString,
       gesture: props.gestureType,
       issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 300000).toISOString(),
+      expiresAt: new Date(Date.now() + tokenTTL).toISOString(),
       version: 1,
     }
     props.onSuccess(token)
@@ -114,6 +123,35 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
     clearToken: clearStoredToken
   } = usePresenceToken(persist)
 
+  // TTL management
+  const {
+    isExpired,
+    isExpiringSoon,
+    timeUntilExpiry,
+    timeUntilWarning,
+    formatTimeRemaining,
+    clearIntervals
+  } = useTokenTTL(token, tokenTTL, {
+    onTokenExpired: props.onTokenExpired,
+    showExpirationWarning,
+    autoRefreshOnExpiry
+  })
+
+  // Handle token expiration
+  const handleTokenExpired = () => {
+    props.onTokenExpired?.()
+    if (autoRefreshOnExpiry) {
+      clearStoredToken()
+      resetDetectionState()
+    }
+  }
+
+  // Handle refresh
+  const handleRefresh = () => {
+    clearStoredToken()
+    resetDetectionState()
+  }
+
   // Only show debug panel if debug is true and in development
   const showDebug = process.env.NODE_ENV === 'development' && !!props.debug
   const [debugCollapsed, setDebugCollapsed] = useState(false)
@@ -141,7 +179,19 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
       <>
         <div className="verified-banner">
           <span className="icon icon-check" /> Human verified with presence token
+          {timeUntilExpiry !== null && (
+            <div className="text-xs text-gray-500 mt-1">
+              Token expires in {formatTimeRemaining(timeUntilExpiry)}
+            </div>
+          )}
         </div>
+        {showExpirationWarning && isExpiringSoon && timeUntilWarning !== null && (
+          <ExpirationWarning
+            timeRemaining={timeUntilWarning}
+            onRefresh={handleRefresh}
+            formatTimeRemaining={formatTimeRemaining}
+          />
+        )}
         {debugPanel}
       </>
     )
@@ -160,6 +210,13 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
             {isModelLoading ? 'Loading...' : 'Start Verification'}
           </button>
         </div>
+        {showExpirationWarning && isExpiringSoon && timeUntilWarning !== null && (
+          <ExpirationWarning
+            timeRemaining={timeUntilWarning}
+            onRefresh={handleRefresh}
+            formatTimeRemaining={formatTimeRemaining}
+          />
+        )}
         {debugPanel}
       </>
     )
@@ -186,6 +243,13 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
         onStart={handleStartCamera}
         onReset={handleCleanup}
       />
+      {showExpirationWarning && isExpiringSoon && timeUntilWarning !== null && (
+        <ExpirationWarning
+          timeRemaining={timeUntilWarning}
+          onRefresh={handleRefresh}
+          formatTimeRemaining={formatTimeRemaining}
+        />
+      )}
       {debugPanel}
     </>
   )

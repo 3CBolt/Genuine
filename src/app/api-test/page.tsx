@@ -137,7 +137,7 @@ export default function ApiTestPage() {
                 <p className="text-sm font-mono text-gray-600">
                   curl -X POST http://localhost:3000/api/verify-human \
                   <br />
-                  &nbsp;&nbsp;-H "Authorization: Bearer {"{token}"}" \
+                  &nbsp;&nbsp;-H "Authorization: Bearer {'{token}'}" \
                   <br />
                   &nbsp;&nbsp;-H "Content-Type: application/json"
                 </p>
@@ -154,7 +154,7 @@ export default function ApiTestPage() {
                   <br />
                   &nbsp;&nbsp;-H "Content-Type: application/json" \
                   <br />
-                  &nbsp;&nbsp;-d '{"token": "your-token-here"}'
+                  &nbsp;&nbsp;-d {'{"token": "your-token-here"}'}
                 </p>
               </div>
             </div>
@@ -167,7 +167,7 @@ export default function ApiTestPage() {
                 <p className="text-sm font-mono text-gray-600">
                   curl -X POST "http://localhost:3000/api/verify-human?oneTimeUse=true" \
                   <br />
-                  &nbsp;&nbsp;-H "Authorization: Bearer {"{token}"}"
+                  &nbsp;&nbsp;-H "Authorization: Bearer {'{token}'}"
                 </p>
               </div>
             </div>

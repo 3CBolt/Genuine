@@ -308,9 +308,9 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     let leftEye: [number, number] | null = null;
     let rightEye: [number, number] | null = null;
     if (isTensor1D(leftEyeRaw)) leftEye = coordsFromTensor1D(leftEyeRaw);
-    else if (Array.isArray(leftEyeRaw) && leftEyeRaw.length === 2) leftEye = leftEyeRaw as [number, number];
+    else if (Array.isArray(leftEyeRaw) && (leftEyeRaw as any[]).length === 2) leftEye = leftEyeRaw as [number, number];
     if (isTensor1D(rightEyeRaw)) rightEye = coordsFromTensor1D(rightEyeRaw);
-    else if (Array.isArray(rightEyeRaw) && rightEyeRaw.length === 2) rightEye = rightEyeRaw as [number, number];
+    else if (Array.isArray(rightEyeRaw) && (rightEyeRaw as any[]).length === 2) rightEye = rightEyeRaw as [number, number];
     if (!leftEye || !rightEye) return {
       leftEyeY: 0,
       rightEyeY: 0,

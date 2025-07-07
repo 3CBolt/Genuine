@@ -33,9 +33,17 @@ yarn add genuine-verify-sdk
 import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk';
 
 function MyApp() {
-  const handleTokenIssued = (token: string) => {
+  const handleTokenIssued = (payload: {
+    token: string;
+    metadata: {
+      issuedAt: string;
+      expiresAt: string;
+      gestureType: string;
+    };
+  }) => {
     // Send token to your backend or validate client-side
-    console.log('Token:', token);
+    console.log('Token:', payload.token);
+    console.log('Metadata:', payload.metadata);
   };
 
   return (
@@ -52,7 +60,7 @@ function MyApp() {
 
 | Prop               | Type                              | Default   | Description                                 |
 |--------------------|-----------------------------------|-----------|---------------------------------------------|
-| `onTokenIssued`    | `(token: string) => void`         | —         | **Required.** Called when token is issued   |
+| `onTokenIssued`    | `(payload: { token: string; metadata: { issuedAt: string; expiresAt: string; gestureType: string; } }) => void` | —         | **Required.** Called when token is issued with metadata   |
 | `tokenTTL`         | `number`                          | `300`     | Token time-to-live (seconds)                |
 | `debug`            | `boolean`                         | `false`   | Show debug panel                            |
 | `headTiltThreshold`| `number`                          | `15`      | Head tilt angle threshold (degrees)         |
@@ -130,8 +138,15 @@ import { GenuineWidgetEmbeddable, verifyToken } from 'genuine-verify-sdk';
 function Demo() {
   const [status, setStatus] = useState<string | null>(null);
 
-  const handleTokenIssued = async (token: string) => {
-    const result = await verifyToken(token);
+  const handleTokenIssued = async (payload: {
+    token: string;
+    metadata: {
+      issuedAt: string;
+      expiresAt: string;
+      gestureType: string;
+    };
+  }) => {
+    const result = await verifyToken(payload.token);
     setStatus(result.valid ? '✅ Valid' : '❌ Invalid');
   };
 
@@ -164,3 +179,20 @@ function Demo() {
 ---
 
 For more, see the [full API docs](./src/index.ts) or open an issue!
+
+---
+
+## 🛠️ TypeScript Configuration Notes
+
+If you use TypeScript and want to avoid React import warnings, make sure your `tsconfig.json` includes these settings:
+
+```json
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  }
+}
+```
+
+This is needed because of how TypeScript handles default imports from CommonJS modules like React. Most modern React/TypeScript setups already have these enabled by default.

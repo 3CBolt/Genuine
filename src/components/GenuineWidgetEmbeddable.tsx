@@ -9,8 +9,15 @@ import { DEFAULT_THRESHOLDS } from '@/lib/genuine-verify/config'
 import { createPresenceToken } from '@/lib/genuine-verify/tokenUtils'
 
 export interface GenuineWidgetEmbeddableProps {
-  /** Callback when a valid token is issued */
-  onTokenIssued: (token: string) => void
+  /** Callback when a valid token is issued with metadata */
+  onTokenIssued: (payload: {
+    token: string;
+    metadata: {
+      issuedAt: string;
+      expiresAt: string;
+      gestureType: string;
+    };
+  }) => void
   /** Token time-to-live in seconds (default: 300) */
   tokenTTL?: number
   /** Show debug panel in development */
@@ -44,7 +51,18 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
   const handleSuccess = useCallback((tokenString: string) => {
     // Create a proper token with the specified TTL
     const token = createPresenceToken('headTilt', tokenTTL * 1000)
-    onTokenIssued(token.token)
+    
+    // Construct the payload with token and metadata
+    const payload = {
+      token: token.token,
+      metadata: {
+        issuedAt: token.issuedAt,
+        expiresAt: token.expiresAt,
+        gestureType: token.gesture
+      }
+    }
+    
+    onTokenIssued(payload)
   }, [onTokenIssued, tokenTTL])
 
   // Detection hook
