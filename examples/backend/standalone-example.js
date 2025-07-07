@@ -5,7 +5,7 @@
  */
 
 const express = require('express');
-const { verifyToken } = require('genuine-verify-sdk');
+const { verifyToken } = require('../../packages/genuine-verify-sdk/dist/index.js');
 
 const app = express();
 app.use(express.json());

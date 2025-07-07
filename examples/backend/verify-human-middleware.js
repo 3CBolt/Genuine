@@ -35,7 +35,7 @@ app.post("/verify-human", (req, res) => {
   
   try {
     // Import the verifyToken function from the SDK
-    const { verifyToken } = require('genuine-verify-sdk');
+    const { verifyToken } = require('../../packages/genuine-verify-sdk/dist/index.js');
     
     // Verify the token
     const valid = verifyToken(token);
