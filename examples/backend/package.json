@@ -1,0 +1,27 @@
+{
+  "name": "genuine-verify-backend-example",
+  "version": "1.0.0",
+  "description": "Sample Express server for /verify-human endpoint",
+  "main": "verify-human-middleware.js",
+  "scripts": {
+    "start": "node verify-human-middleware.js",
+    "dev": "nodemon verify-human-middleware.js",
+    "test": "node test-endpoint.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "genuine-verify-sdk": "file:../../packages/genuine-verify-sdk",
+    "node-fetch": "^2.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "genuine-verify",
+    "express",
+    "middleware",
+    "human-verification"
+  ],
+  "author": "Genuine Verify",
+  "license": "MIT"
+} 
