@@ -8,6 +8,19 @@ import { DebugPanel } from './DebugPanel'
 import { DEFAULT_THRESHOLDS } from '../lib/config'
 import { createPresenceToken } from '../lib/tokenUtils'
 
+export interface FailureContext {
+  /** Reason for the failure */
+  reason: 'max_attempts_reached' | 'gesture_timeout' | 'camera_error' | 'model_error' | 'unknown'
+  /** Number of attempts made */
+  attempts: number
+  /** Maximum attempts allowed */
+  maxAttempts: number
+  /** Error details if available */
+  error?: Error
+  /** Timestamp of the failure */
+  timestamp: string
+}
+
 export interface GenuineWidgetEmbeddableProps {
   /** Callback when a valid token is issued with metadata */
   onTokenIssued: (payload: {
@@ -18,6 +31,8 @@ export interface GenuineWidgetEmbeddableProps {
       gestureType: string;
     };
   }) => void
+  /** Callback when gesture detection fails after max attempts */
+  onFailure?: (context: FailureContext) => void
   /** Token time-to-live in seconds (default: 300) */
   tokenTTL?: number
   /** Show debug panel in development */
@@ -32,6 +47,13 @@ export interface GenuineWidgetEmbeddableProps {
   onStartRef?: (startFn: () => void) => void
   /** Callback for errors */
   onError?: (error: Error) => void
+  /** Maximum attempts before triggering fallback (default: 3) */
+  maxAttempts?: number
+  /** Custom fallback component to render when max attempts reached */
+  fallback?: React.ComponentType<{
+    failureContext: FailureContext
+    triggerRetry: () => void
+  }>
 }
 
 export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = ({

@@ -8,6 +8,19 @@ import { DebugPanel } from './DebugPanel'
 import { DEFAULT_THRESHOLDS } from '@/lib/genuine-verify/config'
 import { createPresenceToken } from '@/lib/genuine-verify/tokenUtils'
 
+export interface FailureContext {
+  /** Reason for the failure */
+  reason: 'max_attempts_reached' | 'gesture_timeout' | 'camera_error' | 'model_error' | 'unknown'
+  /** Number of attempts made */
+  attempts: number
+  /** Maximum attempts allowed */
+  maxAttempts: number
+  /** Error details if available */
+  error?: Error
+  /** Timestamp of the failure */
+  timestamp: string
+}
+
 export interface GenuineWidgetEmbeddableProps {
   /** Callback when a valid token is issued with metadata */
   onTokenIssued: (payload: {
@@ -18,6 +31,8 @@ export interface GenuineWidgetEmbeddableProps {
       gestureType: string;
     };
   }) => void
+  /** Callback when gesture detection fails after max attempts */
+  onFailure?: (context: FailureContext) => void
   /** Token time-to-live in seconds (default: 300) */
   tokenTTL?: number
   /** Show debug panel in development */
@@ -32,23 +47,41 @@ export interface GenuineWidgetEmbeddableProps {
   onStartRef?: (startFn: () => void) => void
   /** Callback for errors */
   onError?: (error: Error) => void
+  /** Maximum attempts before triggering fallback (default: 3) */
+  maxAttempts?: number
+  /** Custom fallback component to render when max attempts reached */
+  fallback?: React.ComponentType<{
+    failureContext: FailureContext
+    triggerRetry: () => void
+  }>
 }
 
 export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = ({
   onTokenIssued,
+  onFailure,
   tokenTTL = 300,
   debug = false,
   headTiltThreshold = DEFAULT_THRESHOLDS.headTiltThreshold,
   persist = true,
   trigger = 'auto',
   onStartRef,
-  onError
+  onError,
+  maxAttempts = 3,
+  fallback: FallbackComponent
 }) => {
   // State for debug panel collapse
   const [debugCollapsed, setDebugCollapsed] = useState(false)
+  
+  // State for failure handling
+  const [attempts, setAttempts] = useState(0)
+  const [failureContext, setFailureContext] = useState<FailureContext | null>(null)
 
   // Handle successful verification
   const handleSuccess = useCallback((tokenString: string) => {
+    // Reset attempts on success
+    setAttempts(0)
+    setFailureContext(null)
+    
     // Create a proper token with the specified TTL
     const token = createPresenceToken('headTilt', tokenTTL * 1000)
     
@@ -64,6 +97,33 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
     
     onTokenIssued(payload)
   }, [onTokenIssued, tokenTTL])
+
+  // Handle failure
+  const handleFailure = useCallback((reason: FailureContext['reason'], error?: Error) => {
+    const newAttempts = attempts + 1
+    setAttempts(newAttempts)
+    
+    if (newAttempts >= maxAttempts) {
+      const context: FailureContext = {
+        reason,
+        attempts: newAttempts,
+        maxAttempts,
+        error,
+        timestamp: new Date().toISOString()
+      }
+      
+      setFailureContext(context)
+      onFailure?.(context)
+    }
+  }, [attempts, maxAttempts, onFailure])
+
+  // Retry function
+  const triggerRetry = useCallback(() => {
+    setAttempts(0)
+    setFailureContext(null)
+    resetDetectionState()
+    handleStartCamera()
+  }, [resetDetectionState, handleStartCamera])
 
   // Detection hook
   const {
@@ -98,10 +158,14 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
     gestureType: 'headTilt',
     headTiltThreshold,
     onSuccess: handleSuccess,
-    onError,
+    onError: (error) => {
+      onError?.(error)
+      handleFailure('model_error', error)
+    },
     persist,
     trigger,
-    onStartRef
+    onStartRef,
+    maxAttempts
   })
 
   // Token management
@@ -159,6 +223,40 @@ export const GenuineWidgetEmbeddable: React.FC<GenuineWidgetEmbeddableProps> = (
         <div className="flex flex-col items-center justify-center p-6 bg-green-50 border border-green-200 rounded-lg">
           <div className="text-2xl font-bold text-green-600 mb-2">✅ Human Verified</div>
           <div className="text-sm text-green-600">Token issued successfully</div>
+        </div>
+        {debugPanel}
+      </>
+    )
+  }
+
+  // Fallback state
+  if (failureContext) {
+    if (FallbackComponent) {
+      return (
+        <>
+          <FallbackComponent 
+            failureContext={failureContext} 
+            triggerRetry={triggerRetry} 
+          />
+          {debugPanel}
+        </>
+      )
+    }
+    
+    // Default fallback UI
+    return (
+      <>
+        <div className="flex flex-col items-center justify-center p-6 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-2xl font-bold text-red-600 mb-2">❌ Verification Failed</div>
+          <div className="text-sm text-red-600 mb-4">
+            Failed after {failureContext.attempts} attempts. Reason: {failureContext.reason}
+          </div>
+          <button
+            onClick={triggerRetry}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Try Again
+          </button>
         </div>
         {debugPanel}
       </>

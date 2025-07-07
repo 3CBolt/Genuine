@@ -61,6 +61,9 @@ function MyApp() {
 | Prop               | Type                              | Default   | Description                                 |
 |--------------------|-----------------------------------|-----------|---------------------------------------------|
 | `onTokenIssued`    | `(payload: { token: string; metadata: { issuedAt: string; expiresAt: string; gestureType: string; } }) => void` | —         | **Required.** Called when token is issued with metadata   |
+| `onFailure`        | `(context: FailureContext) => void`                                                                        | —         | Called when gesture detection fails after max attempts     |
+| `maxAttempts`      | `number`                                                                                                    | `3`       | Maximum attempts before triggering fallback                |
+| `fallback`         | `React.ComponentType<{ failureContext: FailureContext; triggerRetry: () => void }>`                        | —         | Custom fallback component to render on failure            |
 | `tokenTTL`         | `number`                          | `300`     | Token time-to-live (seconds)                |
 | `debug`            | `boolean`                         | `false`   | Show debug panel                            |
 | `headTiltThreshold`| `number`                          | `15`      | Head tilt angle threshold (degrees)         |
@@ -119,6 +122,46 @@ function MyApp() {
 - ✅ **Token management:** Clear stored tokens
 - ✅ **Manual refresh:** Force status update
 - ✅ **TypeScript support:** Full type safety
+
+## 🛡️ Fallback Strategy
+
+Handle gesture detection failures gracefully:
+
+```tsx
+import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk'
+
+// Custom fallback component
+const CustomFallback = ({ failureContext, triggerRetry }) => (
+  <div>
+    <h2>Verification Failed</h2>
+    <p>Attempts: {failureContext.attempts}/{failureContext.maxAttempts}</p>
+    <button onClick={triggerRetry}>Try Again</button>
+  </div>
+)
+
+function MyApp() {
+  const handleFailure = (context) => {
+    console.log('Failed after', context.attempts, 'attempts')
+    console.log('Reason:', context.reason)
+  }
+
+  return (
+    <GenuineWidgetEmbeddable
+      onTokenIssued={handleTokenIssued}
+      onFailure={handleFailure}
+      maxAttempts={5}
+      fallback={CustomFallback}
+    />
+  )
+}
+```
+
+**Fallback Features:**
+- ✅ **onFailure callback:** Get structured failure context with reason, attempts, and error details
+- ✅ **maxAttempts prop:** Configure attempts before fallback (default: 3)
+- ✅ **Custom fallback component:** Pass your own React component for custom error UI
+- ✅ **triggerRetry function:** Exposed retry handler for "Try Again" buttons
+- ✅ **Default fallback UI:** Built-in error display when no custom component provided
 
 ### Example: Token Validation
 

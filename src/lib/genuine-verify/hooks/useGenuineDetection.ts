@@ -36,7 +36,8 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
   onError?: (error: Error) => void,
   persist?: boolean,
   trigger?: 'auto' | 'manual',
-  onStartRef?: (startFn: () => void) => void
+  onStartRef?: (startFn: () => void) => void,
+  maxAttempts?: number
 }) {
   const gestureType = options?.gestureType || 'headTilt';
   const headTiltThreshold = options?.headTiltThreshold ?? 15;
