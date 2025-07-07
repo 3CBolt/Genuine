@@ -196,4 +196,36 @@ function Demo() {
 
 ## 📝 Exports
 
-- `GenuineWidgetEmbeddable` (main wid
+- `GenuineWidgetEmbeddable` (main widget)
+- `verifyToken`, `createPresenceToken`, `getStoredToken`, `storeToken`, `clearStoredToken`, `isStoredTokenValid`, `createMockToken`
+- Types: `PresenceToken`, `TokenValidationResult`, etc.
+
+---
+
+## ⏱️ Get Started in <10 Minutes
+
+1. Install the SDK.
+2. Add `<GenuineWidgetEmbeddable />` to your app.
+3. Handle the token in `onTokenIssued`.
+4. Validate the token with `verifyToken()`.
+
+---
+
+For more, see the [full API docs](./src/index.ts) or open an issue!
+
+---
+
+## 🛠️ TypeScript Configuration Notes
+
+If you use TypeScript and want to avoid React import warnings, make sure your `tsconfig.json` includes these settings:
+
+```json
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  }
+}
+```
+
+This is needed because of how TypeScript handles default imports from CommonJS modules like React. Most modern React/TypeScript setups already have these enabled by default.
