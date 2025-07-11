@@ -269,7 +269,10 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           {/* Clear Token Button */}
           <div className="pt-2 border-t border-gray-200">
             <button
-              onClick={clearToken}
+              onClick={() => {
+                clearToken()
+                location.reload()
+              }}
               className="w-full bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded transition-colors"
             >
               Clear Token

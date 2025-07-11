@@ -107,7 +107,8 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
     onError: props.onError,
     persist,
     trigger,
-    onStartRef: props.onStartRef
+    onStartRef: props.onStartRef,
+    debug: props.debug
   })
 
   const {
@@ -148,6 +149,8 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
   // Only show debug panel if debug is true and in development
   const showDebug = process.env.NODE_ENV === 'development' && !!props.debug
   const [debugCollapsed, setDebugCollapsed] = useState(false)
+  // Add state for copy confirmation
+  const [copied, setCopied] = useState(false)
 
   const debugPanel = showDebug ? (
     <DebugPanel
@@ -170,13 +173,41 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
   if (verified) {
     return (
       <>
-        <div className="verified-banner">
-          <span className="icon icon-check" /> Human verified with presence token
-          {timeUntilExpiry !== null && (
-            <div className="text-xs text-gray-500 mt-1">
-              Token expires in {formatTimeRemaining(timeUntilExpiry)}
+        <div className="flex flex-col items-center justify-center min-h-[320px]">
+          <div className="bg-white border border-blue-200 rounded-xl shadow p-8 max-w-md w-full flex flex-col items-center relative sm:max-w-lg md:max-w-xl">
+            <div className="text-3xl font-bold text-green-600 mb-2 flex items-center gap-2">
+              <span>✅</span> <span>Human Verified</span>
             </div>
-          )}
+            {timeUntilExpiry !== null && (
+              <div className="text-xs text-gray-500 mb-4">Token expires in {formatTimeRemaining(timeUntilExpiry)}</div>
+            )}
+            {/* Debug: Show and Copy Presence Token */}
+            {props.debug && tokenStatus.token?.token && (
+              <div className="flex flex-col items-center w-full">
+                <div className="flex items-center gap-2 text-xs mt-2 mb-1 break-all text-gray-700 bg-gray-100 border border-gray-300 rounded px-3 py-2 w-full justify-between">
+                  <span className="truncate max-w-[220px] sm:max-w-[320px]" style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>Token: {tokenStatus.token.token}</span>
+                  <button
+                    className="min-w-[56px] h-8 px-3 py-1 bg-gray-800 text-white text-xs rounded hover:bg-gray-700 transition ml-2 whitespace-nowrap"
+                    style={{fontWeight: 500, letterSpacing: '0.5px'}}
+                    onClick={() => {
+                      if (tokenStatus.token?.token) {
+                        navigator.clipboard.writeText(tokenStatus.token.token)
+                        setCopied(true)
+                        setTimeout(() => setCopied(false), 1500)
+                      }
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                {copied && (
+                  <div className="absolute top-2 right-2 bg-green-600 text-white text-xs rounded px-3 py-1 shadow animate-fade-in-out z-10">
+                    Copied!
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         {showExpirationWarning && isExpiringSoon && timeUntilWarning !== null && (
           <ExpirationWarning

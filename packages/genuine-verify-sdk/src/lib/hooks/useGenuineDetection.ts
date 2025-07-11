@@ -36,13 +36,15 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
   onError?: (error: Error) => void,
   persist?: boolean,
   trigger?: 'auto' | 'manual',
-  onStartRef?: (startFn: () => void) => void
+  onStartRef?: (startFn: () => void) => void,
+  debug?: boolean
 }) {
   const gestureType = options?.gestureType || 'headTilt';
   const headTiltThreshold = options?.headTiltThreshold ?? 15;
   const onSuccess = options?.onSuccess;
   const onError = options?.onError;
   const persist = options?.persist;
+  const debug = options?.debug;
   const { token: storedToken, isValid: isStoredTokenValid, saveToken, clearToken, getStoredToken } = usePresenceToken(persist);
   const [verified, setVerified] = useState<boolean>(false);
   const trigger = options?.trigger ?? 'auto';
@@ -590,6 +592,10 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
               // Only call onSuccess if we're not in a reset state
               if (!isResetting.current) {
                 onSuccess?.(presenceToken.token);
+                // Console log for debug
+                if (debug) {
+                  console.log("✅ Presence Token:", presenceToken.token);
+                }
               }
             }
           }

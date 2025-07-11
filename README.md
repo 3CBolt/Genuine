@@ -547,3 +547,22 @@ const validToken = createMockToken('headTilt', false)
 // Create expired mock token
 const expiredToken = createMockToken('headTilt', true)
 ```
+
+## 🐞 Debugging & Token Copy
+
+When the `debug` prop is enabled on the widget, you’ll see extra developer tools:
+
+- After successful verification, the presence token is displayed with a **Copy** button.
+- Clicking **Copy** copies the token to your clipboard and shows a green “Copied!” popup for confirmation.
+- The success screen is now more visually readable and responsive.
+- The **Clear Token** button in the debug panel now reloads the page after clearing the token for immediate feedback.
+
+**How to Enable Debug Mode:**
+```tsx
+<GenuineWidget
+  gestureType="headTilt"
+  onSuccess={...}
+  debug={true}
+  ...
+/>
+```
