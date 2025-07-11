@@ -1,14 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useGenuineDetection } from '@/lib/genuine-verify/hooks/useGenuineDetection'
-import { usePresenceToken } from '@/lib/genuine-verify/usePresenceToken'
-import { useTokenTTL } from '@/lib/genuine-verify/hooks/useTokenTTL'
-import { GenuineUI } from './GenuineUI'
-import { DebugPanel } from './DebugPanel'
-import { ExpirationWarning } from './ExpirationWarning'
-import { DEFAULT_THRESHOLDS } from '@/lib/genuine-verify/config'
-import { PresenceToken } from '@/lib/genuine-verify/presence'
+import { useGenuineDetection, usePresenceToken, useTokenTTL, DEFAULT_THRESHOLDS, PresenceToken, GenuineUI, DebugPanel, ExpirationWarning } from 'genuine-verify-sdk'
 
 export interface GenuineWidgetProps {
   gestureType: 'blink' | 'headTilt';

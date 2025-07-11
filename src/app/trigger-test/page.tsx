@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { GenuineWidgetEmbeddable } from '@/components/GenuineWidgetEmbeddable'
-import { useGenuineTrigger } from '@/lib/genuine-verify/hooks/useGenuineTrigger'
+import { useGenuineTrigger } from 'genuine-verify-sdk'
 
 export default function TriggerTest() {
   const [triggerMode, setTriggerMode] = useState<'auto' | 'manual' | 'manualStart'>('manualStart')

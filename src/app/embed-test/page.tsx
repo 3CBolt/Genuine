@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { GenuineWidgetEmbeddable } from '@/components/GenuineWidgetEmbeddable'
-import { verifyToken } from '@/lib/genuine-verify/tokenUtils'
+import { verifyToken } from 'genuine-verify-sdk'
 
 export default function EmbedTest() {
   const [issuedToken, setIssuedToken] = useState<string | null>(null)

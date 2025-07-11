@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useVerificationStatus } from '@/lib/genuine-verify/hooks/useVerificationStatus'
+import { useVerificationStatus, createPresenceToken } from 'genuine-verify-sdk'
 import { GenuineWidgetEmbeddable } from '@/components/GenuineWidgetEmbeddable'
-import { createPresenceToken } from '@/lib/genuine-verify/tokenUtils'
 
 export default function VerificationStatusDemo() {
   const { isVerified, token, expiresIn, isExpiringSoon, timeRemaining, clearToken, refresh } = useVerificationStatus()

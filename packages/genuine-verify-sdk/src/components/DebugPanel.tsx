@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react'
-import { PresenceToken } from '@/lib/genuine-verify/presence'
-import { UnifiedDetectionState, HeadTiltMetrics } from '@/lib/genuine-verify/types'
+import { PresenceToken } from '@/lib/presence'
+import { UnifiedDetectionState, HeadTiltMetrics } from '@/lib/types'
 
 interface DebugPanelProps {
   // Debug values

@@ -1,12 +1,14 @@
 'use client'
 
-import React from 'react'
-import { useGenuineDetection } from '../lib/hooks/useGenuineDetection'
-import { usePresenceToken } from '../lib/usePresenceToken'
+import React, { useState, useEffect, useRef } from 'react'
+import { useGenuineDetection } from '@/lib/hooks/useGenuineDetection'
+import { usePresenceToken } from '@/lib/usePresenceToken'
+import { useTokenTTL } from '@/lib/hooks/useTokenTTL'
 import { GenuineUI } from './GenuineUI'
 import { DebugPanel } from './DebugPanel'
-import { DEFAULT_THRESHOLDS } from '../lib/config'
-import { PresenceToken } from '../lib/presence'
+import { ExpirationWarning } from './ExpirationWarning'
+import { DEFAULT_THRESHOLDS } from '@/lib/config'
+import { PresenceToken } from '@/lib/presence'
 
 export interface GenuineWidgetProps {
   gestureType: 'blink' | 'headTilt';

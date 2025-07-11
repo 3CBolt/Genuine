@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { GenuineWidgetEmbeddable, FailureContext } from '@/components/GenuineWidgetEmbeddable'
-import { createPresenceToken } from '@/lib/genuine-verify/tokenUtils'
+import { createPresenceToken } from 'genuine-verify-sdk'
 
 // Custom fallback component example
 const CustomFallback: React.FC<{

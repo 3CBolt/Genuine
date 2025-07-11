@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { GenuineWidgetEmbeddable } from '@/components/GenuineWidgetEmbeddable'
-import { useGenuineAnalytics } from '@/lib/genuine-verify/hooks/useGenuineAnalytics'
+import { useGenuineAnalytics } from 'genuine-verify-sdk'
 
 export default function AnalyticsTest() {
   const [showAnalytics, setShowAnalytics] = useState(true)

@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { useGenuineDetection } from '../lib/hooks/useGenuineDetection'
-import { usePresenceToken } from '../lib/usePresenceToken'
+import React, { useState, useEffect, useRef } from 'react'
+import { useGenuineDetection } from '@/lib/hooks/useGenuineDetection'
+import { usePresenceToken } from '@/lib/usePresenceToken'
+import { useGenuineTrigger } from '@/lib/hooks/useGenuineTrigger'
 import { GenuineUI } from './GenuineUI'
 import { DebugPanel } from './DebugPanel'
-import { DEFAULT_THRESHOLDS } from '../lib/config'
-import { createPresenceToken } from '../lib/tokenUtils'
+import { DEFAULT_THRESHOLDS } from '@/lib/config'
+import { createPresenceToken } from '@/lib/tokenUtils'
 
 export interface FailureContext {
   /** Reason for the failure */

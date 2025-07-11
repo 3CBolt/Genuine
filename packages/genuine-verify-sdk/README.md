@@ -71,6 +71,35 @@ function MyApp() {
 
 ---
 
+## 🎨 Visual Features
+
+The widget provides real-time visual feedback during verification:
+
+### Status Indicators
+- **🔴 Red badge:** No face detected
+- **🟡 Yellow badge:** Face detected, looking for eyes
+- **🔵 Blue badge:** Eyes detected, waiting for gesture
+- **🟢 Green badge:** Gesture verified!
+
+### Detection Overlays
+- **Lime green bounding boxes:** Real-time face detection
+- **Cyan eye landmarks:** Detected eye positions
+- **Blue framing guide:** Optimal face positioning area
+
+### Real-time Feedback
+- **Status messages:** Clear text instructions
+- **Positioning guidance:** Help users position their face
+- **Error overlays:** Graceful error handling with retry options
+- **Loading states:** Model loading indicators
+
+### Debug Panel (Development Only)
+- **Live FPS tracking:** Performance monitoring
+- **Confidence scores:** Detection accuracy metrics
+- **Detection state:** Face, eyes, gesture, stability status
+- **Token information:** Expiration and validation status
+
+---
+
 ## ⚙️ Widget Usage
 
 ### Basic Example

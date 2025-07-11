@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { GenuineWidget } from '@/components/GenuineWidget'
-import { PresenceToken } from '@/lib/genuine-verify/presence'
+import { PresenceToken } from 'genuine-verify-sdk'
 
 export default function TTLTestPage() {
   const [token, setToken] = useState<PresenceToken | null>(null)

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { DetectionState, UnifiedDetectionState, FacePosition } from '@/lib/genuine-verify/types'
+import { DetectionState, UnifiedDetectionState, FacePosition } from '@/lib/types'
 
 interface GenuineUIProps {
   detectionState: DetectionState

@@ -4,6 +4,11 @@ export { GenuineWidgetEmbeddable } from './components/GenuineWidgetEmbeddable'
 export type { GenuineWidgetProps } from './components/GenuineWidget'
 export type { GenuineWidgetEmbeddableProps } from './components/GenuineWidgetEmbeddable'
 
+// UI Components
+export { GenuineUI } from './components/GenuineUI'
+export { DebugPanel } from './components/DebugPanel'
+export { ExpirationWarning } from './components/ExpirationWarning'
+
 // Types
 export type { PresenceToken } from './lib/presence'
 export type { 

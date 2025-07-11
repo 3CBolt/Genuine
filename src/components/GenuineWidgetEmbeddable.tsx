@@ -1,13 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { useGenuineDetection } from '@/lib/genuine-verify/hooks/useGenuineDetection'
-import { usePresenceToken } from '@/lib/genuine-verify/usePresenceToken'
-import { useGenuineTrigger } from '@/lib/genuine-verify/hooks/useGenuineTrigger'
-import { GenuineUI } from './GenuineUI'
-import { DebugPanel } from './DebugPanel'
-import { DEFAULT_THRESHOLDS } from '@/lib/genuine-verify/config'
-import { createPresenceToken } from '@/lib/genuine-verify/tokenUtils'
+import { useGenuineDetection, usePresenceToken, useGenuineTrigger, GenuineUI, DebugPanel, DEFAULT_THRESHOLDS, createPresenceToken } from 'genuine-verify-sdk'
 
 export interface FailureContext {
   /** Reason for the failure */
