@@ -297,6 +297,58 @@ Enable the debug panel with `debug={true}` to see:
 - **Server verification** via `/api/verify-human` endpoint
 - **Manual trigger mode** for controlled verification flow
 
+## 🛡️ Fallback Handling
+
+The Genuine widget includes a robust fallback system to gracefully handle verification failures and edge cases. This ensures a smooth user experience even when things go wrong (e.g., camera issues, gesture timeouts, or too many failed attempts).
+
+### Why Fallback Matters
+If a user can't complete verification (due to technical issues or repeated failures), the fallback system provides clear feedback and lets you offer retry options or custom error UIs.
+
+### Supported Failure Reasons
+- `max_attempts_reached`
+- `gesture_timeout`
+- `camera_error`
+- `model_error`
+- `unknown`
+
+### Usage Example
+```tsx
+import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk'
+
+// Custom fallback component
+const CustomFallback = ({ failureContext, triggerRetry }) => (
+  <div>
+    <h2>Verification Failed</h2>
+    <p>Reason: {failureContext.reason}</p>
+    <button onClick={triggerRetry}>Try Again</button>
+  </div>
+)
+
+function MyApp() {
+  const handleFailure = (context) => {
+    console.log('Failure:', context)
+  }
+
+  return (
+    <GenuineWidgetEmbeddable
+      onTokenIssued={token => console.log(token)}
+      onFailure={handleFailure}
+      fallback={CustomFallback}
+      maxAttempts={3}
+    />
+  )
+}
+```
+
+- Use the `onFailure` prop to handle failures programmatically.
+- Pass a `fallback` component to customize the error UI.
+- Use the `triggerRetry` function to let users try again.
+
+### Live Demo
+Test fallback scenarios at [`/fallback-test`](http://localhost:3000/fallback-test).
+
+*Failure reporting hooks for analytics coming soon.*
+
 ## 📦 Dependencies
 
 ### Core Dependencies

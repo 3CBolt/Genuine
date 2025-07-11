@@ -213,10 +213,21 @@ function MyApp() {
 
 ---
 
-## 🛡️ Fallback Strategy
+## 🛡️ Fallback Handling
 
-Handle gesture detection failures gracefully:
+The SDK provides a robust fallback system to handle verification failures gracefully—whether due to user error, technical issues, or edge cases. This helps you deliver a smooth, user-friendly experience even when things go wrong.
 
+### Why Fallback Matters
+If a user can't complete verification (e.g., camera denied, gesture timeout, or too many failed attempts), the fallback system provides clear feedback and lets you offer retry options or custom error UIs.
+
+### Supported Failure Reasons
+- `max_attempts_reached`
+- `gesture_timeout`
+- `camera_error`
+- `model_error`
+- `unknown`
+
+### Usage Example
 ```tsx
 import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk'
 
@@ -224,34 +235,35 @@ import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk'
 const CustomFallback = ({ failureContext, triggerRetry }) => (
   <div>
     <h2>Verification Failed</h2>
-    <p>Attempts: {failureContext.attempts}/{failureContext.maxAttempts}</p>
+    <p>Reason: {failureContext.reason}</p>
     <button onClick={triggerRetry}>Try Again</button>
   </div>
 )
 
 function MyApp() {
   const handleFailure = (context) => {
-    console.log('Failed after', context.attempts, 'attempts')
-    console.log('Reason:', context.reason)
+    console.log('Failure:', context)
   }
 
   return (
     <GenuineWidgetEmbeddable
-      onTokenIssued={handleTokenIssued}
+      onTokenIssued={token => console.log(token)}
       onFailure={handleFailure}
-      maxAttempts={5}
       fallback={CustomFallback}
+      maxAttempts={3}
     />
   )
 }
 ```
 
-**Fallback Features:**
-- ✅ **onFailure callback:** Get structured failure context with reason, attempts, and error details
-- ✅ **maxAttempts prop:** Configure attempts before fallback (default: 3)
-- ✅ **Custom fallback component:** Pass your own React component for custom error UI
-- ✅ **triggerRetry function:** Exposed retry handler for "Try Again" buttons
-- ✅ **Default fallback UI:** Built-in error display when no custom component provided
+- Use the `onFailure` prop to handle failures programmatically.
+- Pass a `fallback` component to customize the error UI.
+- Use the `triggerRetry` function to let users try again.
+
+### Live Demo
+Test fallback scenarios at [`/fallback-test`](http://localhost:3000/fallback-test).
+
+*Failure reporting hooks for analytics coming soon.*
 
 ---
 
@@ -400,110 +412,4 @@ function Demo() {
 - `GenuineWidgetEmbeddable` (main widget)
 
 ### Utilities
-- `verifyToken`, `createPresenceToken`, `getStoredToken`, `storeToken`, `clearStoredToken`, `isStoredTokenValid`, `createMockToken`
-
-### Hooks
-- `useVerificationStatus` - Real-time verification status
-- `useGenuineTrigger` - Programmatic trigger control
-- `useGenuineAnalytics` - Development analytics
-- `useTokenTTL` - Token expiration management
-- `usePresenceToken` - Token management
-- `useGenuineDetection` - Detection state management
-
-### Types
-- `PresenceToken`, `TokenValidationResult`, `FailureContext`, etc.
-
----
-
-## ⏱️ Get Started in <10 Minutes
-
-1. Install the SDK: `npm install genuine-verify-sdk`
-2. Add `<GenuineWidgetEmbeddable />` to your app
-3. Handle the token in `onTokenIssued`
-4. Validate the token with `verifyToken()`
-
----
-
-## 🛠️ TypeScript Configuration Notes
-
-If you use TypeScript and want to avoid React import warnings, make sure your `tsconfig.json` includes these settings:
-
-```json
-{
-  "compilerOptions": {
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
-  }
-}
-```
-
-This is needed because of how TypeScript handles default imports from CommonJS modules like React. Most modern React/TypeScript setups already have these enabled by default.
-
----
-
-## 📊 Analytics (Dev Only)
-
-Track real-time detection analytics in development with the `useGenuineAnalytics` hook.
-
-```tsx
-import { useGenuineAnalytics } from 'genuine-verify-sdk'
-
-function AnalyticsPanel() {
-  // You need to pass detection state from your widget
-  const detectionState: AnalyticsDetectionState = {
-    isCameraActive: false,
-    gestureMatched: false,
-    detectionState: 'idle',
-    fps: 0
-  }
-  
-  const { successCount, failureCount, attemptCount, fps, lastEvent, clear } = useGenuineAnalytics(detectionState, {
-    persist: false, // Set true to persist to localStorage
-    logToConsole: true // Set false to disable console logs
-  })
-
-  return (
-    <div>
-      <h3>Analytics (Dev Only)</h3>
-      <ul>
-        <li>Successes: {successCount}</li>
-        <li>Failures: {failureCount}</li>
-        <li>Attempts: {attemptCount}</li>
-        <li>FPS: {fps}</li>
-        <li>Last Event: {lastEvent}</li>
-      </ul>
-      <button onClick={clear}>Clear Analytics</button>
-    </div>
-  )
-}
-```
-
-**Features:**
-- ✅ Real-time updates for detection attempts, successes, failures, and FPS
-- ✅ Lightweight, no server calls
-- ✅ Console logging (dev only)
-- ✅ Optional localStorage persistence (dev only)
-
-**Usage Notes:**
-- Analytics are only active in development (`NODE_ENV !== 'production'`).
-- No data is sent to any server—everything is client-side.
-- For privacy and performance, do **not** use analytics in production or for user-facing metrics.
-- You can disable console logging or localStorage with the hook options.
-- To extend analytics (e.g., custom events), use the `log` function returned by the hook.
-
-**Warning:**
-> Overuse of analytics in production can impact privacy and performance. This hook is intended for development and debugging only. Do not use for user tracking or telemetry.
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-For more information, visit our [GitHub repository](https://github.com/3CBolt/Genuine) or [report an issue](https://github.com/3CBolt/Genuine/issues).
+- `verifyToken`, `
