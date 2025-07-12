@@ -1,6 +1,6 @@
 {
   "name": "genuine-verify-sdk",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Privacy-first human verification widget using React, Next.js, and TensorFlow.js",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
