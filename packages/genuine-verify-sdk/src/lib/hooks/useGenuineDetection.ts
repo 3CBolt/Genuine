@@ -4,6 +4,7 @@ import { cleanup, startCamera } from '../camera'
 import { loadBlazeFaceModel, detectFaces, calculateHeadTilt, isModelLoaded, isModelLoading, clearModel, coordsFromTensor1D, isTensor1D } from '../blazeface'
 import { usePresenceToken } from '../usePresenceToken'
 import { getPresenceToken, isTokenExpired } from '../presence'
+import { logVerificationStarted, logVerificationSuccess, logVerificationFailed, logWidgetLoaded } from '../../utils/logEvent'
 
 const REQUIRED_STABLE_FRAMES = 5
 const MAX_MISSED_FRAMES = 3
@@ -421,6 +422,8 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
         setStatus('Detection failed. Click Try Again.')
         setCountdownMessage('')
         clearDetectionInterval()
+        // Log verification failed
+        logVerificationFailed('timeout', gestureType);
       }
     }
 
@@ -437,9 +440,12 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     setStatus('An error occurred during detection')
     clearDetectionInterval()
     
+    // Log verification failed
+    logVerificationFailed('error', gestureType);
+    
     // Call the onError callback if provided
     onError?.(new Error(`Detection error: ${error.message}`))
-  }, [clearDetectionInterval, onError])
+  }, [clearDetectionInterval, onError, gestureType])
 
   // Draw dynamic overlays for face detection and framing guide
   const drawDebugOverlay = useCallback((face: FaceDetectionPrediction | null) => {
@@ -589,6 +595,10 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
               if (persist) saveToken(presenceToken);
               setVerified(true);
               
+              // Log verification success
+              const timeToVerifyMs = performance.now() - detectionStartTime.current;
+              logVerificationSuccess(gestureType, timeToVerifyMs, true);
+              
               // Only call onSuccess if we're not in a reset state
               if (!isResetting.current) {
                 onSuccess?.(presenceToken.token);
@@ -630,6 +640,8 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
   useEffect(() => {
     if (persist && storedToken && !isTokenExpired(storedToken)) {
       setVerified(true)
+      // Log verification success from stored token
+      logVerificationSuccess(gestureType, 0, true);
       // Only call onSuccess if we're not in a reset state
       if (!isResetting.current) {
         onSuccess?.(storedToken.token)
@@ -638,6 +650,11 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
       return
     }
   }, [persist, storedToken, onSuccess])
+
+  // Log widget loaded on mount
+  useEffect(() => {
+    logWidgetLoaded(gestureType, debug ? 'debug' : undefined);
+  }, [gestureType, debug]);
 
   // Enhanced clearToken function that resets all state
   const enhancedClearToken = useCallback(() => {
@@ -670,7 +687,9 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
   // Manual start function
   const manualStartFn = useCallback(() => {
     setManualStarted(true);
-  }, []);
+    // Log verification started
+    logVerificationStarted(gestureType);
+  }, [gestureType]);
 
   // Expose manualStartFn via onStartRef
   useEffect(() => {

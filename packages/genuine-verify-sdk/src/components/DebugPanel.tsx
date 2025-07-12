@@ -22,6 +22,7 @@ interface DebugPanelProps {
   // Optional collapse state
   isCollapsed?: boolean
   onToggleCollapse?: () => void
+  theme?: 'light' | 'dark'
 }
 
 export const DebugPanel: React.FC<DebugPanelProps> = ({
@@ -34,13 +35,44 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   resetDetectionState,
   clearToken,
   isCollapsed = false,
-  onToggleCollapse
+  onToggleCollapse,
+  theme = 'light'
 }) => {
   const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setIsMounted(true)
   }, [])
+
+  // Theme-based styling
+  const getThemeStyles = () => {
+    if (theme === 'dark') {
+      return {
+        container: 'w-full mt-4 bg-[#18181B] border border-[#232323] rounded-lg shadow-none text-sm text-[#EAEAEA] max-w-xs',
+        header: 'flex items-center justify-between p-3 border-b border-[#333] bg-[#232323] rounded-t-lg',
+        headerText: 'text-xs font-semibold text-[#EAEAEA]',
+        devBadge: 'text-xs text-green-400 bg-green-900/20 px-1 rounded',
+        toggleButton: 'text-[#6366F1] hover:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#6366F1] rounded transition-colors text-xs px-2 py-1',
+        content: 'p-3 space-y-2',
+        text: 'text-[#EAEAEA]',
+        textSecondary: 'text-[#999]',
+        border: 'border-[#333]'
+      }
+    }
+    return {
+      container: 'w-full mt-4 bg-white border border-gray-300 rounded-lg shadow-lg text-sm text-black max-w-xs',
+      header: 'flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 rounded-t-lg',
+      headerText: 'text-xs font-semibold text-gray-700',
+      devBadge: 'text-xs text-green-600 bg-green-100 px-1 rounded',
+      toggleButton: 'text-gray-500 hover:text-gray-700 text-xs',
+      content: 'p-3 space-y-2',
+      text: 'text-black',
+      textSecondary: 'text-gray-600',
+      border: 'border-gray-200'
+    }
+  }
+
+  const styles = getThemeStyles()
 
   // Don't render until client-side to prevent hydration mismatch
   if (!isMounted) {
@@ -127,19 +159,19 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   }
 
   return (
-    <div className="fixed bottom-4 right-4 bg-white border border-gray-300 rounded-lg shadow-lg text-sm text-black z-50 max-w-xs">
+    <div className={styles.container}>
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+      <div className={styles.header}>
         <div className="flex items-center space-x-2">
-          <span className="text-xs font-semibold text-gray-700">🔧 Debug Panel</span>
+          <span className={styles.headerText}>🔧 Debug Panel</span>
           {process.env.NODE_ENV === 'development' && (
-            <span className="text-xs text-green-600 bg-green-100 px-1 rounded">DEV</span>
+            <span className={styles.devBadge}>DEV</span>
           )}
         </div>
         <div className="flex items-center space-x-1">
           <button
             onClick={onToggleCollapse}
-            className="text-gray-500 hover:text-gray-700 text-xs"
+            className={styles.toggleButton}
             aria-label="Toggle Debug Info"
           >
             {isCollapsed ? '▲' : '▼'}
@@ -149,34 +181,34 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
 
       {/* Content */}
       {!isCollapsed && (
-        <div className="p-3 space-y-2">
+        <div className={styles.content}>
           {/* Status */}
           <div className="flex justify-between items-center">
-            <span className="text-gray-600">Status:</span>
+            <span className={styles.textSecondary}>Status:</span>
             <span className="font-mono text-xs">{getStatusIndicator()}</span>
           </div>
 
           {/* Detection Activity */}
           <div className="flex justify-between items-center">
-            <span className="text-gray-600">Detection:</span>
-            <span className={`font-mono text-xs ${isDetectionActive() ? 'text-green-600' : 'text-gray-500'}`}>
+            <span className={styles.textSecondary}>Detection:</span>
+            <span className={`font-mono text-xs ${isDetectionActive() ? 'text-green-600' : styles.textSecondary}`}>
               {isDetectionActive() ? '✓ Active' : '— Idle'}
             </span>
           </div>
 
           {/* Performance Indicators */}
-          <div className="pt-2 border-t border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Performance:</div>
+          <div className={`pt-2 ${styles.border} border-t`}>
+            <div className={`text-xs ${styles.textSecondary} mb-1`}>Performance:</div>
             <div className="space-y-1">
               {/* FPS */}
               <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-xs">FPS:</span>
+                <span className={`${styles.textSecondary} text-xs`}>FPS:</span>
                 <span className={`font-mono text-xs ${getFpsColor()}`}>{formatFps()}</span>
               </div>
 
               {/* Confidence Score */}
               <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-xs">Confidence:</span>
+                <span className={`${styles.textSecondary} text-xs`}>Confidence:</span>
                 <span className={`font-mono text-xs ${getConfidenceColor()}`}>{formatConfidence()}</span>
               </div>
 
