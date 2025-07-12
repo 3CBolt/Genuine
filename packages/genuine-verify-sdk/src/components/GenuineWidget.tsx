@@ -9,6 +9,7 @@ import { DebugPanel } from './DebugPanel'
 import { ExpirationWarning } from './ExpirationWarning'
 import { DEFAULT_THRESHOLDS } from '@/lib/config'
 import { PresenceToken } from '@/lib/presence'
+import { DebugPanelMini } from './DebugPanelMini'
 
 export interface GenuineWidgetProps {
   gestureType: 'blink' | 'headTilt';
@@ -203,6 +204,12 @@ export const GenuineWidget: React.FC<GenuineWidgetProps> = (props) => {
                     Copied!
                   </div>
                 )}
+                {/* Minimal Debug Panel */}
+                <DebugPanelMini
+                  status={status}
+                  confidence={confidenceScore}
+                  token={tokenStatus.token.token}
+                />
               </div>
             )}
           </div>

@@ -215,55 +215,29 @@ function MyApp() {
 
 ## 🛡️ Fallback Handling
 
-The SDK provides a robust fallback system to handle verification failures gracefully—whether due to user error, technical issues, or edge cases. This helps you deliver a smooth, user-friendly experience even when things go wrong.
+The SDK automatically handles gesture failures and edge cases.
 
-### Why Fallback Matters
-If a user can't complete verification (e.g., camera denied, gesture timeout, or too many failed attempts), the fallback system provides clear feedback and lets you offer retry options or custom error UIs.
+Reasons for fallback include:
+- `gesture_timeout`: User didn’t complete gesture in time
+- `camera_error`: Camera blocked or inaccessible
+- `model_error`: Face detection failed
+- `max_attempts_reached`: Too many failed tries
+- `unknown`: Unexpected error
 
-### Supported Failure Reasons
-- `max_attempts_reached`
-- `gesture_timeout`
-- `camera_error`
-- `model_error`
-- `unknown`
+Developers can pass an `onFailure` callback to capture detailed failure context.
+You can provide a custom fallback component via the `fallback` prop.
+If no fallback is provided, the SDK shows a default UI with retry.
+Fallbacks also expose a `triggerRetry()` helper to restart verification.
 
-### Usage Example
+**Usage Example:**
 ```tsx
-import { GenuineWidgetEmbeddable } from 'genuine-verify-sdk'
-
-// Custom fallback component
-const CustomFallback = ({ failureContext, triggerRetry }) => (
-  <div>
-    <h2>Verification Failed</h2>
-    <p>Reason: {failureContext.reason}</p>
-    <button onClick={triggerRetry}>Try Again</button>
-  </div>
-)
-
-function MyApp() {
-  const handleFailure = (context) => {
-    console.log('Failure:', context)
-  }
-
-  return (
-    <GenuineWidgetEmbeddable
-      onTokenIssued={token => console.log(token)}
-      onFailure={handleFailure}
-      fallback={CustomFallback}
-      maxAttempts={3}
-    />
-  )
-}
+<GenuineWidgetEmbeddable
+  onTokenIssued={handleToken}
+  onFailure={handleFailure}
+  maxAttempts={3}
+  fallback={MyCustomFallback}
+/>
 ```
-
-- Use the `onFailure` prop to handle failures programmatically.
-- Pass a `fallback` component to customize the error UI.
-- Use the `triggerRetry` function to let users try again.
-
-### Live Demo
-Test fallback scenarios at [`/fallback-test`](http://localhost:3000/fallback-test).
-
-*Failure reporting hooks for analytics coming soon.*
 
 ---
 

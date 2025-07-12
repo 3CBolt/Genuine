@@ -6,7 +6,7 @@ export type { GenuineWidgetEmbeddableProps } from './components/GenuineWidgetEmb
 
 // UI Components
 export { GenuineUI } from './components/GenuineUI'
-export { DebugPanel } from './components/DebugPanel'
+export { DebugPanelMini as DebugPanel } from './components/DebugPanelMini'
 export { ExpirationWarning } from './components/ExpirationWarning'
 
 // Types

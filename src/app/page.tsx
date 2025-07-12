@@ -1,6 +1,6 @@
 'use client'
 
-import { GenuineWidget } from "@/components/GenuineWidget"
+import { GenuineWidget } from "genuine-verify-sdk"
 import { PresenceToken } from "@/lib/genuine-verify/presence"
 
 export default function Home() {

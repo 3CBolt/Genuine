@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { GenuineWidget } from '@/components/GenuineWidget'
+import { GenuineWidget } from 'genuine-verify-sdk'
 import { PresenceToken } from 'genuine-verify-sdk'
 
 export default function TTLTestPage() {
