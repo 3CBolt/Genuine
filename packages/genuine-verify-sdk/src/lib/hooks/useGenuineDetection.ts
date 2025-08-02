@@ -794,16 +794,19 @@ export function useGenuineDetection(options?: GenuineDetectionOptions & {
     }
   }, [getCanvasElement])
 
-  // Set canvas size to match video when video is ready
+  // Set canvas size to match the actual widget container size
   useEffect(() => {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return
     const setCanvasSize = () => {
-      if (video.videoWidth && video.videoHeight) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-      }
+      const container = video.parentElement
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      canvas.width = rect.width
+      canvas.height = rect.height
+      canvas.style.width = `${rect.width}px`
+      canvas.style.height = `${rect.height}px`
     }
     video.addEventListener('loadedmetadata', setCanvasSize)
     setCanvasSize()
